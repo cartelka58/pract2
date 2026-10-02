@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../models/models.dart';
-import '../repositories/seed_data.dart';
 import '../state/notifiers.dart';
 import '../widgets/entity_table.dart';
 import '../widgets/paginator.dart';
@@ -26,7 +25,6 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
       final n = context.read<BouquetListNotifier>();
       final uri = GoRouterState.of(context).uri;
       final params = uri.queryParameters;
-
       if (params.isNotEmpty) {
         n.applyQuery(BouquetListNotifier.queryFromUri(params));
         _searchController.text = params['search'] ?? '';
@@ -55,6 +53,8 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
   @override
   Widget build(BuildContext context) {
     final n = context.watch<BouquetListNotifier>();
+    final categories = context.watch<CategoryListNotifier>().items;
+    final suppliers = context.watch<SupplierListNotifier>().items;
     final isNarrow = MediaQuery.of(context).size.width < 600;
     final rose = Theme.of(context).colorScheme.primary;
     final lavender = Theme.of(context).colorScheme.secondary;
@@ -84,9 +84,29 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
         ),
         actions: [
           IconButton(
+            tooltip: 'Добавить букет',
+            icon: const Icon(Icons.add),
+            onPressed: () => context.go('/bouquets/new'),
+          ),
+          IconButton(
+            tooltip: 'Категории',
+            icon: const Icon(Icons.category),
+            onPressed: () => context.go('/categories'),
+          ),
+          IconButton(
+            tooltip: 'Поставщики',
+            icon: const Icon(Icons.local_shipping),
+            onPressed: () => context.go('/suppliers'),
+          ),
+          IconButton(
             tooltip: 'Флористы',
             icon: const Icon(Icons.emoji_nature),
             onPressed: () => context.go('/florists'),
+          ),
+          IconButton(
+            tooltip: 'Покупатели',
+            icon: const Icon(Icons.people),
+            onPressed: () => context.go('/customers'),
           ),
         ],
       ),
@@ -100,7 +120,7 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
         ),
         child: Column(
           children: [
-            _filters(n, rose, lavender),
+            _filters(n, categories, suppliers, rose, lavender),
             if (n.hasSelection)
               Material(
                 color: rose.withValues(alpha: 0.15),
@@ -133,7 +153,9 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
                   ),
                 ),
               ),
-            Expanded(child: _body(n, isNarrow, rose, lavender)),
+            Expanded(
+              child: _body(n, categories, suppliers, isNarrow, rose, lavender),
+            ),
             if (n.status == LoadStatus.success)
               Paginator(
                 page: n.result.page,
@@ -149,7 +171,13 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
     );
   }
 
-  Widget _filters(BouquetListNotifier n, Color rose, Color lavender) {
+  Widget _filters(
+    BouquetListNotifier n,
+    List<Category> categories,
+    List<Supplier> suppliers,
+    Color rose,
+    Color lavender,
+  ) {
     return Padding(
       padding: const EdgeInsets.all(12),
       child: Container(
@@ -192,8 +220,8 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
                     value: null,
                     child: Text('Все категории'),
                   ),
-                  for (final e in kCategories.entries)
-                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                  for (final c in categories)
+                    DropdownMenuItem(value: c.id, child: Text(c.name)),
                 ],
                 onChanged: (v) => n.applyQuery(n.query.copyWith(categoryId: v)),
               ),
@@ -209,8 +237,8 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
                     value: null,
                     child: Text('Все поставщики'),
                   ),
-                  for (final e in kSuppliers.entries)
-                    DropdownMenuItem(value: e.key, child: Text(e.value)),
+                  for (final s in suppliers)
+                    DropdownMenuItem(value: s.id, child: Text(s.name)),
                 ],
                 onChanged: (v) => n.applyQuery(n.query.copyWith(supplierId: v)),
               ),
@@ -251,7 +279,14 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
     );
   }
 
-  Widget _body(BouquetListNotifier n, bool narrow, Color rose, Color lavender) {
+  Widget _body(
+    BouquetListNotifier n,
+    List<Category> categories,
+    List<Supplier> suppliers,
+    bool narrow,
+    Color rose,
+    Color lavender,
+  ) {
     switch (n.status) {
       case LoadStatus.idle:
       case LoadStatus.loading:
@@ -315,13 +350,22 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
                 ),
               ],
             ),
-            child: _table(n),
+            child: _table(n, categories),
           ),
         );
     }
   }
 
-  Widget _table(BouquetListNotifier n) {
+  Widget _table(BouquetListNotifier n, List<Category> categories) {
+    String catNames(Bouquet b) {
+      return b.categoryIds
+          .map((id) {
+            final matches = categories.where((c) => c.id == id);
+            return matches.isEmpty ? '?' : matches.first.name;
+          })
+          .join(', ');
+    }
+
     return EntityTable<Bouquet>(
       items: n.result.items,
       idOf: (b) => b.id,
@@ -358,18 +402,18 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
           numeric: true,
           build: (b) => Text('${b.stemCount}'),
         ),
-        TableColumnSpec(
-          label: 'Категории',
-          build: (b) => Text(
-            b.categoryIds.map((id) => kCategories[id] ?? '?').join(', '),
-          ),
-        ),
+        TableColumnSpec(label: 'Категории', build: (b) => Text(catNames(b))),
         TableColumnSpec(
           label: 'Склад',
           build: (b) => Text('${b.stockAvailable}/${b.stockTotal}'),
         ),
       ],
       actions: (b) => [
+        IconButton(
+          icon: const Icon(Icons.edit),
+          tooltip: 'Редактировать',
+          onPressed: () => context.go('/bouquets/${b.id}/edit'),
+        ),
         if (!b.isDeleted)
           IconButton(
             icon: const Icon(Icons.delete_outline),
@@ -411,9 +455,14 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
             subtitle: Text(
               '${b.price.toStringAsFixed(0)} ₽ • ${b.stemCount} стеблей • ${b.sku}',
             ),
+            onTap: () => context.go('/bouquets/${b.id}'),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: () => context.go('/bouquets/${b.id}/edit'),
+                ),
                 if (!b.isDeleted)
                   IconButton(
                     icon: const Icon(Icons.delete_outline),

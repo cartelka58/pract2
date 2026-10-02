@@ -55,9 +55,14 @@ class _FloristListScreenState extends State<FloristListScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: 'Букеты',
-            icon: const Icon(Icons.menu_book),
+            tooltip: 'К букетам',
+            icon: const Icon(Icons.local_florist),
             onPressed: () => context.go('/'),
+          ),
+          IconButton(
+            tooltip: 'Добавить флориста',
+            icon: const Icon(Icons.add),
+            onPressed: () => context.go('/florists/new'),
           ),
         ],
       ),
@@ -149,11 +154,7 @@ class _FloristListScreenState extends State<FloristListScreen> {
                 const SizedBox(height: 16),
                 Text(
                   'Здесь пока пусто',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    color: rose,
-                  ),
+                  style: TextStyle(fontSize: 20, color: rose),
                 ),
               ],
             ),
@@ -177,6 +178,26 @@ class _FloristListScreenState extends State<FloristListScreen> {
                     style: TextStyle(color: rose, fontWeight: FontWeight.w600),
                   ),
                   subtitle: Text('${f.city}, с ${f.experienceYear ?? "—"}'),
+                  onTap: () => context.go('/florists/${f.id}'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => context.go('/florists/${f.id}/edit'),
+                      ),
+                      if (!f.isDeleted)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => n.softDeleteOne(f.id),
+                        )
+                      else
+                        IconButton(
+                          icon: const Icon(Icons.restore),
+                          onPressed: () => n.restoreOne(f.id),
+                        ),
+                    ],
+                  ),
                 ),
               );
             },
@@ -211,6 +232,7 @@ class _FloristListScreenState extends State<FloristListScreen> {
                       : true,
                 ),
               ),
+              isDeleted: (f) => f.isDeleted,
               columns: [
                 TableColumnSpec(
                   label: 'Фамилия',
@@ -230,6 +252,30 @@ class _FloristListScreenState extends State<FloristListScreen> {
                 TableColumnSpec(
                   label: 'В профессии с',
                   build: (f) => Text('${f.experienceYear ?? "—"}'),
+                ),
+              ],
+              actions: (f) => [
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  tooltip: 'Редактировать',
+                  onPressed: () => context.go('/florists/${f.id}/edit'),
+                ),
+                if (!f.isDeleted)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    tooltip: 'Логически удалить',
+                    onPressed: () => n.softDeleteOne(f.id),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.restore),
+                    tooltip: 'Восстановить',
+                    onPressed: () => n.restoreOne(f.id),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.delete_forever),
+                  tooltip: 'Удалить насовсем',
+                  onPressed: () => n.hardDeleteOne(f.id),
                 ),
               ],
             ),

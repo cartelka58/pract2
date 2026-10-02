@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
-import '../repositories/repositories.dart';
 import '../models/models.dart';
+import '../repositories/repositories.dart';
 
 class FloristDetailScreen extends StatefulWidget {
   final int id;
@@ -24,7 +24,6 @@ class _FloristDetailScreenState extends State<FloristDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final rose = Theme.of(context).colorScheme.primary;
-   
 
     return Scaffold(
       appBar: AppBar(
@@ -108,24 +107,6 @@ class _FloristDetailScreenState extends State<FloristDetailScreen> {
                           _row('Фамилия', f.lastName),
                           _row('Город', f.city),
                           _row('В профессии с', '${f.experienceYear ?? "—"}'),
-                          if (f.isDeleted)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 16),
-                              child: Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withValues(alpha: 0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Row(
-                                  children: [
-                                    Icon(Icons.delete_outline),
-                                    SizedBox(width: 8),
-                                    Text('Логически удалён'),
-                                  ],
-                                ),
-                              ),
-                            ),
                           const SizedBox(height: 24),
                           Row(
                             children: [

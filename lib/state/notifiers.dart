@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' hide Category;
 import '../models/models.dart';
 import '../repositories/repositories.dart';
 
@@ -67,7 +67,6 @@ class BouquetListNotifier extends ChangeNotifier {
     await load();
   }
 
-  /// Преобразует текущий query в строку URL-параметров.
   String toQueryString() {
     final params = <String, String>{};
     if (_query.search.isNotEmpty) params['search'] = _query.search;
@@ -98,7 +97,6 @@ class BouquetListNotifier extends ChangeNotifier {
         .join('&');
   }
 
-  /// Восстанавливает query из URL-параметров.
   static BouquetQuery queryFromUri(Map<String, String> p) {
     return BouquetQuery(
       search: p['search'] ?? '',
@@ -176,5 +174,164 @@ class FloristListNotifier extends ChangeNotifier {
   Future<void> restoreOne(int id) async {
     await _repo.restore(id);
     await load();
+  }
+}
+
+class CategoryListNotifier extends ChangeNotifier {
+  final CategoryRepository _repo;
+  CategoryListNotifier(this._repo);
+
+  List<Category> _items = [];
+  LoadStatus _status = LoadStatus.idle;
+  String? _error;
+  bool _includeDeleted = false;
+
+  List<Category> get items => List.unmodifiable(_items);
+  LoadStatus get status => _status;
+  String? get error => _error;
+  bool get includeDeleted => _includeDeleted;
+
+  Future<void> load() async {
+    _status = LoadStatus.loading;
+    _error = null;
+    notifyListeners();
+    try {
+      _items = await _repo.findAll(includeDeleted: _includeDeleted);
+      _status = LoadStatus.success;
+    } catch (e) {
+      _error = '$e';
+      _status = LoadStatus.error;
+    }
+    notifyListeners();
+  }
+
+  Future<void> toggleIncludeDeleted(bool value) async {
+    _includeDeleted = value;
+    await load();
+  }
+
+  Future<void> softDelete(int id) async {
+    await _repo.softDelete(id);
+    await load();
+  }
+
+  Future<void> hardDelete(int id) async {
+    await _repo.hardDelete(id);
+    await load();
+  }
+
+  Future<void> restore(int id) async {
+    await _repo.restore(id);
+    await load();
+  }
+}
+
+class SupplierListNotifier extends ChangeNotifier {
+  final SupplierRepository _repo;
+  SupplierListNotifier(this._repo);
+
+  List<Supplier> _items = [];
+  LoadStatus _status = LoadStatus.idle;
+  String? _error;
+  bool _includeDeleted = false;
+
+  List<Supplier> get items => List.unmodifiable(_items);
+  LoadStatus get status => _status;
+  String? get error => _error;
+  bool get includeDeleted => _includeDeleted;
+
+  Future<void> load() async {
+    _status = LoadStatus.loading;
+    _error = null;
+    notifyListeners();
+    try {
+      _items = await _repo.findAll(includeDeleted: _includeDeleted);
+      _status = LoadStatus.success;
+    } catch (e) {
+      _error = '$e';
+      _status = LoadStatus.error;
+    }
+    notifyListeners();
+  }
+
+  Future<void> toggleIncludeDeleted(bool value) async {
+    _includeDeleted = value;
+    await load();
+  }
+
+  Future<void> softDelete(int id) async {
+    final count = await _repo.countBouquets(id);
+    if (count > 0) {
+      throw StateError('Нельзя удалить: с поставщиком связано $count букетов');
+    }
+    await _repo.softDelete(id);
+    await load();
+  }
+
+  Future<void> hardDelete(int id) async {
+    final count = await _repo.countBouquets(id);
+    if (count > 0) {
+      throw StateError('Нельзя удалить: с поставщиком связано $count букетов');
+    }
+    await _repo.hardDelete(id);
+    await load();
+  }
+
+  Future<void> restore(int id) async {
+    await _repo.restore(id);
+    await load();
+  }
+}
+
+class CustomerListNotifier extends ChangeNotifier {
+  final CustomerRepository _repo;
+  CustomerListNotifier(this._repo);
+
+  List<Customer> _items = [];
+  LoadStatus _status = LoadStatus.idle;
+  String? _error;
+  bool _includeDeleted = false;
+
+  List<Customer> get items => List.unmodifiable(_items);
+  LoadStatus get status => _status;
+  String? get error => _error;
+  bool get includeDeleted => _includeDeleted;
+
+  Future<void> load() async {
+    _status = LoadStatus.loading;
+    _error = null;
+    notifyListeners();
+    try {
+      _items = await _repo.findAll(includeDeleted: _includeDeleted);
+      _status = LoadStatus.success;
+    } catch (e) {
+      _error = '$e';
+      _status = LoadStatus.error;
+    }
+    notifyListeners();
+  }
+
+  Future<void> toggleIncludeDeleted(bool value) async {
+    _includeDeleted = value;
+    await load();
+  }
+
+  Future<void> softDelete(int id) async {
+    await _repo.softDelete(id);
+    await load();
+  }
+
+  Future<void> hardDelete(int id) async {
+    await _repo.hardDelete(id);
+    await load();
+  }
+
+  Future<void> restore(int id) async {
+    await _repo.restore(id);
+    await load();
+  }
+
+  Future<bool> emailExists(String email, {int? exceptId}) {
+    return _repo.emailExists(email, exceptId: exceptId);
   }
 }

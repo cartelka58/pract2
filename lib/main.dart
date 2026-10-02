@@ -1,22 +1,53 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'repositories/repositories.dart';
+import 'repositories/persistent_repositories.dart';
 import 'router.dart';
 import 'state/notifiers.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
+
+  final prefs = await SharedPreferences.getInstance();
+
   runApp(
     MultiProvider(
       providers: [
-        Provider<BouquetRepository>(create: (_) => InMemoryBouquetRepository()),
-        Provider<FloristRepository>(create: (_) => InMemoryFloristRepository()),
+        Provider<BouquetRepository>(
+          create: (_) => PersistentBouquetRepository(prefs),
+        ),
+        Provider<FloristRepository>(
+          create: (_) => PersistentFloristRepository(prefs),
+        ),
+        Provider<CategoryRepository>(
+          create: (_) => PersistentCategoryRepository(prefs),
+        ),
+        Provider<SupplierRepository>(
+          create: (ctx) => PersistentSupplierRepository(
+            prefs,
+            ctx.read<BouquetRepository>(),
+          ),
+        ),
+        Provider<CustomerRepository>(
+          create: (_) => PersistentCustomerRepository(prefs),
+        ),
         ChangeNotifierProvider(
           create: (ctx) => BouquetListNotifier(ctx.read<BouquetRepository>()),
         ),
         ChangeNotifierProvider(
           create: (ctx) => FloristListNotifier(ctx.read<FloristRepository>()),
+        ),
+        ChangeNotifierProvider(
+          create: (ctx) => CategoryListNotifier(ctx.read<CategoryRepository>()),
+        ),
+        ChangeNotifierProvider(
+          create: (ctx) => SupplierListNotifier(ctx.read<SupplierRepository>()),
+        ),
+        ChangeNotifierProvider(
+          create: (ctx) => CustomerListNotifier(ctx.read<CustomerRepository>()),
         ),
       ],
       child: const FlowerShopApp(),

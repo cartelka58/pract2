@@ -4,21 +4,21 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../repositories/repositories.dart';
 
-class BouquetDetailScreen extends StatefulWidget {
+class CategoryDetailScreen extends StatefulWidget {
   final int id;
-  const BouquetDetailScreen({super.key, required this.id});
+  const CategoryDetailScreen({super.key, required this.id});
 
   @override
-  State<BouquetDetailScreen> createState() => _BouquetDetailScreenState();
+  State<CategoryDetailScreen> createState() => _CategoryDetailScreenState();
 }
 
-class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
-  late Future<Bouquet?> _future;
+class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
+  late Future<Category?> _future;
 
   @override
   void initState() {
     super.initState();
-    _future = context.read<BouquetRepository>().findById(widget.id);
+    _future = context.read<CategoryRepository>().findById(widget.id);
   }
 
   @override
@@ -31,16 +31,16 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
         title: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.local_florist),
+            Icon(Icons.category),
             SizedBox(width: 8),
-            Text('Букет'),
+            Text('Категория'),
           ],
         ),
         actions: [
           IconButton(
             tooltip: 'К списку',
             icon: const Icon(Icons.list),
-            onPressed: () => context.go('/'),
+            onPressed: () => context.go('/categories'),
           ),
         ],
       ),
@@ -49,20 +49,26 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFFFFF8E1), Color(0xFFFCE4EC), Color(0xFFEDE7F6)],
+            colors: [
+              Color(0xFFFFF8E1),
+              Color(0xFFFCE4EC),
+              Color(0xFFEDE7F6),
+            ],
           ),
         ),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
-            child: FutureBuilder<Bouquet?>(
+            child: FutureBuilder<Category?>(
               future: _future,
               builder: (context, snap) {
                 if (snap.connectionState != ConnectionState.done) {
-                  return Center(child: CircularProgressIndicator(color: rose));
+                  return Center(
+                    child: CircularProgressIndicator(color: rose),
+                  );
                 }
-                final b = snap.data;
-                if (b == null) {
+                final c = snap.data;
+                if (c == null) {
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -70,12 +76,12 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
                         Icon(Icons.error_outline, size: 72, color: rose),
                         const SizedBox(height: 16),
                         Text(
-                          'Букет с id=${widget.id} не найден',
+                          'Категория с id=${widget.id} не найдена',
                           style: TextStyle(color: rose, fontSize: 18),
                         ),
                         const SizedBox(height: 24),
                         FilledButton.icon(
-                          onPressed: () => context.go('/'),
+                          onPressed: () => context.go('/categories'),
                           icon: const Icon(Icons.arrow_back),
                           label: const Text('К списку'),
                         ),
@@ -93,11 +99,11 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.local_florist, color: rose, size: 40),
+                              Icon(Icons.category, color: rose, size: 40),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  b.title,
+                                  c.name,
                                   style: TextStyle(
                                     fontSize: 26,
                                     fontWeight: FontWeight.bold,
@@ -107,23 +113,40 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            b.sku,
-                            style: TextStyle(color: lavender, fontSize: 16),
-                          ),
                           const Divider(height: 32),
-                          _row('Цена', '${b.price.toStringAsFixed(0)} ₽'),
-                          _row('Количество стеблей', '${b.stemCount}'),
-                          _row(
-                            'На складе',
-                            '${b.stockAvailable} из ${b.stockTotal}',
-                          ),
+                          _row('Описание', c.description),
+                          _row('ID', '${c.id}'),
+                          if (c.isDeleted)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline,
+                                        color: lavender),
+                                    const SizedBox(width: 8),
+                                    const Text('Логически удалена'),
+                                  ],
+                                ),
+                              ),
+                            ),
                           const SizedBox(height: 24),
                           Row(
                             children: [
                               FilledButton.icon(
-                                onPressed: () => context.go('/'),
+                                onPressed: () => context
+                                    .go('/categories/${c.id}/edit'),
+                                icon: const Icon(Icons.edit),
+                                label: const Text('Редактировать'),
+                              ),
+                              const SizedBox(width: 12),
+                              OutlinedButton.icon(
+                                onPressed: () => context.go('/categories'),
                                 icon: const Icon(Icons.arrow_back),
                                 label: const Text('К списку'),
                               ),
@@ -149,11 +172,9 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           SizedBox(
-            width: 180,
-            child: Text(
-              label,
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            ),
+            width: 140,
+            child: Text(label,
+                style: const TextStyle(fontWeight: FontWeight.w600)),
           ),
           Expanded(child: Text(value)),
         ],

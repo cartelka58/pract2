@@ -4,21 +4,33 @@ import 'package:provider/provider.dart';
 import '../models/models.dart';
 import '../repositories/repositories.dart';
 
-class BouquetDetailScreen extends StatefulWidget {
+class SupplierDetailScreen extends StatefulWidget {
   final int id;
-  const BouquetDetailScreen({super.key, required this.id});
+  const SupplierDetailScreen({super.key, required this.id});
 
   @override
-  State<BouquetDetailScreen> createState() => _BouquetDetailScreenState();
+  State<SupplierDetailScreen> createState() => _SupplierDetailScreenState();
 }
 
-class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
-  late Future<Bouquet?> _future;
+class _SupplierDetailScreenState extends State<SupplierDetailScreen> {
+  late Future<Supplier?> _future;
+  int _bouquetCount = 0;
 
   @override
   void initState() {
     super.initState();
-    _future = context.read<BouquetRepository>().findById(widget.id);
+    _load();
+  }
+
+  Future<void> _load() async {
+    final repo = context.read<SupplierRepository>();
+    final s = await repo.findById(widget.id);
+    final count = await repo.countBouquets(widget.id);
+    if (!mounted) return;
+    setState(() {
+      _future = Future.value(s);
+      _bouquetCount = count;
+    });
   }
 
   @override
@@ -31,16 +43,16 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
         title: const Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.local_florist),
+            Icon(Icons.local_shipping),
             SizedBox(width: 8),
-            Text('Букет'),
+            Text('Поставщик'),
           ],
         ),
         actions: [
           IconButton(
             tooltip: 'К списку',
             icon: const Icon(Icons.list),
-            onPressed: () => context.go('/'),
+            onPressed: () => context.go('/suppliers'),
           ),
         ],
       ),
@@ -55,14 +67,14 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 600),
-            child: FutureBuilder<Bouquet?>(
+            child: FutureBuilder<Supplier?>(
               future: _future,
               builder: (context, snap) {
                 if (snap.connectionState != ConnectionState.done) {
                   return Center(child: CircularProgressIndicator(color: rose));
                 }
-                final b = snap.data;
-                if (b == null) {
+                final s = snap.data;
+                if (s == null) {
                   return Center(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
@@ -70,12 +82,12 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
                         Icon(Icons.error_outline, size: 72, color: rose),
                         const SizedBox(height: 16),
                         Text(
-                          'Букет с id=${widget.id} не найден',
+                          'Поставщик с id=${widget.id} не найден',
                           style: TextStyle(color: rose, fontSize: 18),
                         ),
                         const SizedBox(height: 24),
                         FilledButton.icon(
-                          onPressed: () => context.go('/'),
+                          onPressed: () => context.go('/suppliers'),
                           icon: const Icon(Icons.arrow_back),
                           label: const Text('К списку'),
                         ),
@@ -93,13 +105,13 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
                         children: [
                           Row(
                             children: [
-                              Icon(Icons.local_florist, color: rose, size: 40),
+                              Icon(Icons.local_shipping, color: rose, size: 40),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  b.title,
+                                  s.name,
                                   style: TextStyle(
-                                    fontSize: 26,
+                                    fontSize: 24,
                                     fontWeight: FontWeight.bold,
                                     color: rose,
                                   ),
@@ -107,23 +119,41 @@ class _BouquetDetailScreenState extends State<BouquetDetailScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            b.sku,
-                            style: TextStyle(color: lavender, fontSize: 16),
-                          ),
                           const Divider(height: 32),
-                          _row('Цена', '${b.price.toStringAsFixed(0)} ₽'),
-                          _row('Количество стеблей', '${b.stemCount}'),
-                          _row(
-                            'На складе',
-                            '${b.stockAvailable} из ${b.stockTotal}',
-                          ),
+                          _row('Телефон', s.phone),
+                          _row('Город', s.city),
+                          _row('Связанных букетов', '$_bouquetCount'),
+                          if (s.isDeleted)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 16),
+                              child: Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.delete_outline, color: lavender),
+                                    const SizedBox(width: 8),
+                                    const Text('Логически удалён'),
+                                  ],
+                                ),
+                              ),
+                            ),
                           const SizedBox(height: 24),
-                          Row(
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 12,
                             children: [
                               FilledButton.icon(
-                                onPressed: () => context.go('/'),
+                                onPressed: () =>
+                                    context.go('/suppliers/${s.id}/edit'),
+                                icon: const Icon(Icons.edit),
+                                label: const Text('Редактировать'),
+                              ),
+                              OutlinedButton.icon(
+                                onPressed: () => context.go('/suppliers'),
                                 icon: const Icon(Icons.arrow_back),
                                 label: const Text('К списку'),
                               ),
