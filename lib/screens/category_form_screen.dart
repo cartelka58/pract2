@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
+import '../core/api_exceptions.dart';
 import '../models/models.dart';
 import '../repositories/repositories.dart';
 
@@ -18,6 +20,8 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
+
+  Map<String, String> _serverErrors = {};
   bool _loading = false;
   bool _initialized = false;
 
@@ -50,35 +54,42 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
   }
 
   Future<void> _submit() async {
+    setState(() => _serverErrors = {});
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
 
     final repo = context.read<CategoryRepository>();
-    if (widget.isEditing) {
-      final existing = await repo.findById(widget.id!);
-      if (existing == null) {
-        if (!mounted) return;
-        setState(() => _loading = false);
-        return;
-      }
-      await repo.update(
-        existing.copyWith(
-          name: _nameController.text.trim(),
-          description: _descriptionController.text.trim(),
-        ),
-      );
-    } else {
-      await repo.create(
-        Category(
-          id: 0,
-          name: _nameController.text.trim(),
-          description: _descriptionController.text.trim(),
-        ),
-      );
-    }
+    final category = Category(
+      id: widget.id ?? 0,
+      name: _nameController.text.trim(),
+      description: _descriptionController.text.trim(),
+    );
 
-    if (!mounted) return;
-    context.go('/categories');
+    try {
+      if (widget.isEditing) {
+        await repo.update(category);
+      } else {
+        await repo.create(category);
+      }
+      if (!mounted) return;
+      context.go('/categories');
+    } on ValidationException catch (e) {
+      if (!mounted) return;
+      setState(() => _serverErrors = e.errors);
+      _formKey.currentState!.validate();
+    } on ConflictException catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.message);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _showSnackBar(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   @override
@@ -132,11 +143,13 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                             prefixIcon: Icon(Icons.category),
                           ),
                           validator: (v) {
+                            final server = _serverErrors['name'];
+                            if (server != null) return server;
                             if (v == null || v.trim().isEmpty) {
                               return 'Введите название';
                             }
                             if (v.trim().length < 2) {
-                              return 'Название слишком короткое';
+                              return 'Слишком короткое';
                             }
                             if (v.trim().length > 50) {
                               return 'Не более 50 символов';
@@ -153,6 +166,8 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                             prefixIcon: Icon(Icons.description),
                           ),
                           validator: (v) {
+                            final server = _serverErrors['description'];
+                            if (server != null) return server;
                             if (v == null || v.trim().isEmpty) {
                               return 'Введите описание';
                             }
@@ -168,9 +183,20 @@ class _CategoryFormScreenState extends State<CategoryFormScreen> {
                             Expanded(
                               child: FilledButton(
                                 onPressed: _loading ? null : _submit,
-                                child: Text(
-                                  widget.isEditing ? 'Сохранить' : 'Создать',
-                                ),
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Text(
+                                        widget.isEditing
+                                            ? 'Сохранить'
+                                            : 'Создать',
+                                      ),
                               ),
                             ),
                             const SizedBox(width: 12),

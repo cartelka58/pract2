@@ -1,9 +1,15 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+
+import 'core/api_client.dart';
+import 'repositories/api_bouquet_repository.dart';
+import 'repositories/api_category_repository.dart';
+import 'repositories/api_customer_repository.dart';
+import 'repositories/api_florist_repository.dart';
+import 'repositories/api_supplier_repository.dart';
 import 'repositories/repositories.dart';
-import 'repositories/persistent_repositories.dart';
 import 'router.dart';
 import 'state/notifiers.dart';
 
@@ -11,29 +17,28 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
 
-  final prefs = await SharedPreferences.getInstance();
-
   runApp(
     MultiProvider(
       providers: [
+        Provider<Dio>(create: (_) => buildDio()),
+
         Provider<BouquetRepository>(
-          create: (_) => PersistentBouquetRepository(prefs),
+          create: (ctx) => ApiBouquetRepository(ctx.read<Dio>()),
         ),
         Provider<FloristRepository>(
-          create: (_) => PersistentFloristRepository(prefs),
+          create: (ctx) => ApiFloristRepository(ctx.read<Dio>()),
         ),
         Provider<CategoryRepository>(
-          create: (_) => PersistentCategoryRepository(prefs),
+          create: (ctx) => ApiCategoryRepository(ctx.read<Dio>()),
         ),
         Provider<SupplierRepository>(
-          create: (ctx) => PersistentSupplierRepository(
-            prefs,
-            ctx.read<BouquetRepository>(),
-          ),
+          create: (ctx) => ApiSupplierRepository(ctx.read<Dio>()),
         ),
         Provider<CustomerRepository>(
-          create: (_) => PersistentCustomerRepository(prefs),
+          create: (ctx) => ApiCustomerRepository(ctx.read<Dio>()),
         ),
+
+        // Состояние
         ChangeNotifierProvider(
           create: (ctx) => BouquetListNotifier(ctx.read<BouquetRepository>()),
         ),

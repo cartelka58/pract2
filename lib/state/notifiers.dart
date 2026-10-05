@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' hide Category;
+import '../core/api_exceptions.dart';
 import '../models/models.dart';
 import '../repositories/repositories.dart';
 
@@ -28,6 +29,9 @@ class BouquetListNotifier extends ChangeNotifier {
     try {
       _result = await _repo.find(_query);
       _status = LoadStatus.success;
+    } on ApiException catch (e) {
+      _error = e.message;
+      _status = LoadStatus.error;
     } catch (e) {
       _error = '$e';
       _status = LoadStatus.error;
@@ -137,6 +141,9 @@ class FloristListNotifier extends ChangeNotifier {
     try {
       _result = await _repo.find(_query);
       _status = LoadStatus.success;
+    } on ApiException catch (e) {
+      _error = e.message;
+      _status = LoadStatus.error;
     } catch (e) {
       _error = '$e';
       _status = LoadStatus.error;
@@ -198,6 +205,9 @@ class CategoryListNotifier extends ChangeNotifier {
     try {
       _items = await _repo.findAll(includeDeleted: _includeDeleted);
       _status = LoadStatus.success;
+    } on ApiException catch (e) {
+      _error = e.message;
+      _status = LoadStatus.error;
     } catch (e) {
       _error = '$e';
       _status = LoadStatus.error;
@@ -247,6 +257,9 @@ class SupplierListNotifier extends ChangeNotifier {
     try {
       _items = await _repo.findAll(includeDeleted: _includeDeleted);
       _status = LoadStatus.success;
+    } on ApiException catch (e) {
+      _error = e.message;
+      _status = LoadStatus.error;
     } catch (e) {
       _error = '$e';
       _status = LoadStatus.error;
@@ -259,10 +272,15 @@ class SupplierListNotifier extends ChangeNotifier {
     await load();
   }
 
+  /// Проверяет связанные букеты и, если они есть, бросает ConflictException
+  /// (а не StateError), чтобы в интерфейсе показывалось чистое сообщение
+  /// без технического префикса «Bad state:».
   Future<void> softDelete(int id) async {
     final count = await _repo.countBouquets(id);
     if (count > 0) {
-      throw StateError('Нельзя удалить: с поставщиком связано $count букетов');
+      throw ConflictException(
+        'Нельзя удалить: с поставщиком связано $count букетов',
+      );
     }
     await _repo.softDelete(id);
     await load();
@@ -271,7 +289,9 @@ class SupplierListNotifier extends ChangeNotifier {
   Future<void> hardDelete(int id) async {
     final count = await _repo.countBouquets(id);
     if (count > 0) {
-      throw StateError('Нельзя удалить: с поставщиком связано $count букетов');
+      throw ConflictException(
+        'Нельзя удалить: с поставщиком связано $count букетов',
+      );
     }
     await _repo.hardDelete(id);
     await load();
@@ -304,6 +324,9 @@ class CustomerListNotifier extends ChangeNotifier {
     try {
       _items = await _repo.findAll(includeDeleted: _includeDeleted);
       _status = LoadStatus.success;
+    } on ApiException catch (e) {
+      _error = e.message;
+      _status = LoadStatus.error;
     } catch (e) {
       _error = '$e';
       _status = LoadStatus.error;

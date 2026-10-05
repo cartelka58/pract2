@@ -1,5 +1,8 @@
 import 'dart:convert';
+
+import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../models/models.dart';
 import 'repositories.dart';
 import 'seed_data.dart';
@@ -39,11 +42,16 @@ class PersistentBouquetRepository implements BouquetRepository {
   }
 
   @override
-  Future<PageResult<Bouquet>> find(BouquetQuery q) async {
+  Future<PageResult<Bouquet>> find(
+    BouquetQuery q, {
+    CancelToken? cancelToken,
+  }) async {
     await Future.delayed(const Duration(milliseconds: 250));
+
     var rows = _bouquets
         .where((b) => q.includeDeleted || !b.isDeleted)
         .toList();
+
     if (q.search.trim().isNotEmpty) {
       final needle = q.search.trim().toLowerCase();
       rows = rows
@@ -66,6 +74,7 @@ class PersistentBouquetRepository implements BouquetRepository {
     if (q.priceTo != null) {
       rows = rows.where((b) => b.price <= q.priceTo!).toList();
     }
+
     rows.sort((a, b) {
       final r = switch (q.sortField) {
         'price' => a.price.compareTo(b.price),
@@ -74,6 +83,7 @@ class PersistentBouquetRepository implements BouquetRepository {
       };
       return q.sortAscending ? r : -r;
     });
+
     final total = rows.length;
     final from = (q.page - 1) * q.size;
     final to = (from + q.size) > total ? total : (from + q.size);
@@ -193,9 +203,11 @@ class PersistentFloristRepository implements FloristRepository {
   @override
   Future<PageResult<Florist>> find(BouquetQuery q) async {
     await Future.delayed(const Duration(milliseconds: 250));
+
     var rows = _florists
         .where((f) => q.includeDeleted || !f.isDeleted)
         .toList();
+
     if (q.search.trim().isNotEmpty) {
       final needle = q.search.trim().toLowerCase();
       rows = rows
@@ -207,6 +219,7 @@ class PersistentFloristRepository implements FloristRepository {
           )
           .toList();
     }
+
     rows.sort((a, b) {
       final r = switch (q.sortField) {
         'firstName' => a.firstName.toLowerCase().compareTo(
@@ -217,6 +230,7 @@ class PersistentFloristRepository implements FloristRepository {
       };
       return q.sortAscending ? r : -r;
     });
+
     final total = rows.length;
     final from = (q.page - 1) * q.size;
     final to = (from + q.size) > total ? total : (from + q.size);

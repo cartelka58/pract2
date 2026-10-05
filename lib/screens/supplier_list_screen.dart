@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
+import '../core/api_exceptions.dart';
 import '../models/models.dart';
 import '../state/notifiers.dart';
 import '../widgets/entity_table.dart';
@@ -32,6 +34,8 @@ class _SupplierListScreenState extends State<SupplierListScreen> {
       } else {
         await n.softDelete(id);
       }
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (e) {
       messenger.showSnackBar(SnackBar(content: Text('$e')));
     }

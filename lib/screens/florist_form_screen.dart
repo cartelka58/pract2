@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
+import '../core/api_exceptions.dart';
 import '../models/models.dart';
 import '../repositories/repositories.dart';
 import '../utils/validators.dart';
@@ -22,6 +24,7 @@ class _FloristFormScreenState extends State<FloristFormScreen> {
   final _cityController = TextEditingController();
   final _experienceController = TextEditingController();
 
+  Map<String, String> _serverErrors = {};
   bool _loading = false;
   bool _initialized = false;
 
@@ -58,6 +61,8 @@ class _FloristFormScreenState extends State<FloristFormScreen> {
   }
 
   Future<void> _submit() async {
+    setState(() => _serverErrors = {});
+
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
 
@@ -65,31 +70,39 @@ class _FloristFormScreenState extends State<FloristFormScreen> {
     final expStr = _experienceController.text.trim();
     final exp = expStr.isEmpty ? null : int.tryParse(expStr);
 
-    if (widget.isEditing) {
-      final existing = await repo.findById(widget.id!);
-      if (existing == null) {
-        if (!mounted) return;
-        setState(() => _loading = false);
-        return;
-      }
-      await repo.update(existing.copyWith(
-        firstName: _firstNameController.text.trim(),
-        lastName: _lastNameController.text.trim(),
-        city: _cityController.text.trim(),
-        experienceYear: exp,
-      ));
-    } else {
-      await repo.create(Florist(
-        id: 0,
-        firstName: _firstNameController.text.trim(),
-        lastName: _lastNameController.text.trim(),
-        city: _cityController.text.trim(),
-        experienceYear: exp,
-      ));
-    }
+    final florist = Florist(
+      id: widget.id ?? 0,
+      firstName: _firstNameController.text.trim(),
+      lastName: _lastNameController.text.trim(),
+      city: _cityController.text.trim(),
+      experienceYear: exp,
+    );
 
-    if (!mounted) return;
-    context.go('/florists');
+    try {
+      if (widget.isEditing) {
+        await repo.update(florist);
+      } else {
+        await repo.create(florist);
+      }
+      if (!mounted) return;
+      context.go('/florists');
+    } on ValidationException catch (e) {
+      if (!mounted) return;
+      setState(() => _serverErrors = e.errors);
+      _formKey.currentState!.validate();
+    } on ConflictException catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.message);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _showSnackBar(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   @override
@@ -104,9 +117,9 @@ class _FloristFormScreenState extends State<FloristFormScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isEditing
-            ? 'Редактирование флориста'
-            : 'Новый флорист'),
+        title: Text(
+          widget.isEditing ? 'Редактирование флориста' : 'Новый флорист',
+        ),
         actions: [
           IconButton(
             tooltip: 'К списку',
@@ -120,11 +133,7 @@ class _FloristFormScreenState extends State<FloristFormScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFFFF8E1),
-              Color(0xFFFCE4EC),
-              Color(0xFFEDE7F6),
-            ],
+            colors: [Color(0xFFFFF8E1), Color(0xFFFCE4EC), Color(0xFFEDE7F6)],
           ),
         ),
         child: Center(
@@ -146,8 +155,16 @@ class _FloristFormScreenState extends State<FloristFormScreen> {
                             labelText: 'Имя',
                             prefixIcon: Icon(Icons.person),
                           ),
-                          validator: (v) => Validators.lengthRange(v,
-                              min: 2, max: 40, label: 'Имя'),
+                          validator: (v) {
+                            final server = _serverErrors['firstName'];
+                            if (server != null) return server;
+                            return Validators.lengthRange(
+                              v,
+                              min: 2,
+                              max: 40,
+                              label: 'Имя',
+                            );
+                          },
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -156,8 +173,16 @@ class _FloristFormScreenState extends State<FloristFormScreen> {
                             labelText: 'Фамилия',
                             prefixIcon: Icon(Icons.person_outline),
                           ),
-                          validator: (v) => Validators.lengthRange(v,
-                              min: 2, max: 40, label: 'Фамилия'),
+                          validator: (v) {
+                            final server = _serverErrors['lastName'];
+                            if (server != null) return server;
+                            return Validators.lengthRange(
+                              v,
+                              min: 2,
+                              max: 40,
+                              label: 'Фамилия',
+                            );
+                          },
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -166,8 +191,16 @@ class _FloristFormScreenState extends State<FloristFormScreen> {
                             labelText: 'Город',
                             prefixIcon: Icon(Icons.location_city),
                           ),
-                          validator: (v) => Validators.lengthRange(v,
-                              min: 2, max: 50, label: 'Город'),
+                          validator: (v) {
+                            final server = _serverErrors['city'];
+                            if (server != null) return server;
+                            return Validators.lengthRange(
+                              v,
+                              min: 2,
+                              max: 50,
+                              label: 'Город',
+                            );
+                          },
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -178,6 +211,8 @@ class _FloristFormScreenState extends State<FloristFormScreen> {
                             prefixIcon: Icon(Icons.calendar_today),
                           ),
                           validator: (v) {
+                            final server = _serverErrors['experienceYear'];
+                            if (server != null) return server;
                             final s = v?.trim() ?? '';
                             if (s.isEmpty) return null;
                             final n = int.tryParse(s);
@@ -194,9 +229,20 @@ class _FloristFormScreenState extends State<FloristFormScreen> {
                             Expanded(
                               child: FilledButton(
                                 onPressed: _loading ? null : _submit,
-                                child: Text(widget.isEditing
-                                    ? 'Сохранить'
-                                    : 'Создать'),
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Text(
+                                        widget.isEditing
+                                            ? 'Сохранить'
+                                            : 'Создать',
+                                      ),
                               ),
                             ),
                             const SizedBox(width: 12),

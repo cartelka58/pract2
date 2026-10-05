@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
+import '../core/api_exceptions.dart';
 import '../models/models.dart';
 import '../repositories/repositories.dart';
 import '../utils/validators.dart';
@@ -29,6 +31,9 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
 
   List<Supplier> _suppliers = [];
   List<Category> _categories = [];
+
+  /// Ошибки валидации, пришедшие с сервера (код 422).
+  Map<String, String> _serverErrors = {};
 
   bool _loading = false;
   bool _initialized = false;
@@ -78,85 +83,62 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
   }
 
   Future<void> _submit() async {
+    // Сбрасываем серверные ошибки перед новой попыткой
+    setState(() => _serverErrors = {});
+
     if (!_formKey.currentState!.validate()) return;
     if (_supplierId == null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Выберите поставщика')));
+      _showSnackBar('Выберите поставщика');
       return;
     }
     if (_categoryIds.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Выберите хотя бы одну категорию')),
-      );
+      _showSnackBar('Выберите хотя бы одну категорию');
       return;
     }
+
     setState(() => _loading = true);
 
     final repo = context.read<BouquetRepository>();
-
-    final title = _titleController.text.trim();
-    final sku = _skuController.text.trim().toUpperCase();
-    final price =
-        double.tryParse(_priceController.text.replaceAll(',', '.')) ?? 0;
-    final stem = int.tryParse(_stemController.text.trim()) ?? 0;
-    final stockTotal = int.tryParse(_stockTotalController.text.trim()) ?? 0;
-    final stockAvail = int.tryParse(_stockAvailableController.text.trim()) ?? 0;
-
-    // Проверка уникальности артикула
-    final all = await repo.find(const BouquetQuery(size: 10000));
-    final duplicate = all.items.any(
-      (b) =>
-          b.sku.toLowerCase() == sku.toLowerCase() &&
-          (!widget.isEditing || b.id != widget.id),
+    final bouquet = Bouquet(
+      id: widget.id ?? 0,
+      title: _titleController.text.trim(),
+      sku: _skuController.text.trim().toUpperCase(),
+      price: double.tryParse(_priceController.text.replaceAll(',', '.')) ?? 0,
+      stemCount: int.tryParse(_stemController.text.trim()) ?? 0,
+      supplierId: _supplierId!,
+      categoryIds: _categoryIds,
+      stockTotal: int.tryParse(_stockTotalController.text.trim()) ?? 0,
+      stockAvailable: int.tryParse(_stockAvailableController.text.trim()) ?? 0,
     );
 
-    if (duplicate) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Артикул уже используется')));
-      return;
-    }
-
-    if (widget.isEditing) {
-      final existing = await repo.findById(widget.id!);
-      if (existing == null) {
-        if (!mounted) return;
-        setState(() => _loading = false);
-        return;
+    try {
+      if (widget.isEditing) {
+        await repo.update(bouquet);
+      } else {
+        await repo.create(bouquet);
       }
-      await repo.update(
-        existing.copyWith(
-          title: title,
-          sku: sku,
-          price: price,
-          stemCount: stem,
-          supplierId: _supplierId,
-          categoryIds: _categoryIds,
-          stockTotal: stockTotal,
-          stockAvailable: stockAvail,
-        ),
-      );
-    } else {
-      await repo.create(
-        Bouquet(
-          id: 0,
-          title: title,
-          sku: sku,
-          price: price,
-          stemCount: stem,
-          supplierId: _supplierId!,
-          categoryIds: _categoryIds,
-          stockTotal: stockTotal,
-          stockAvailable: stockAvail,
-        ),
-      );
+      if (!mounted) return;
+      context.go('/');
+    } on ValidationException catch (e) {
+      // 422 — раскладываем по полям и перерисовываем форму
+      if (!mounted) return;
+      setState(() => _serverErrors = e.errors);
+      _formKey.currentState!.validate();
+    } on ConflictException catch (e) {
+      // 409 — показываем SnackBar
+      if (!mounted) return;
+      _showSnackBar(e.message);
+    } on ApiException catch (e) {
+      // Все остальные ошибки API
+      if (!mounted) return;
+      _showSnackBar(e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
+  }
 
-    if (!mounted) return;
-    context.go('/');
+  void _showSnackBar(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   @override
@@ -208,12 +190,16 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
                             labelText: 'Название',
                             prefixIcon: Icon(Icons.local_florist),
                           ),
-                          validator: (v) => Validators.lengthRange(
-                            v,
-                            min: 2,
-                            max: 80,
-                            label: 'Название',
-                          ),
+                          validator: (v) {
+                            final server = _serverErrors['title'];
+                            if (server != null) return server;
+                            return Validators.lengthRange(
+                              v,
+                              min: 2,
+                              max: 80,
+                              label: 'Название',
+                            );
+                          },
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -222,7 +208,11 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
                             labelText: 'Артикул (FL-000)',
                             prefixIcon: Icon(Icons.qr_code),
                           ),
-                          validator: Validators.sku,
+                          validator: (v) {
+                            final server = _serverErrors['sku'];
+                            if (server != null) return server;
+                            return Validators.sku(v);
+                          },
                         ),
                         const SizedBox(height: 16),
                         Row(
@@ -235,12 +225,16 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
                                   labelText: 'Цена, ₽',
                                   prefixIcon: Icon(Icons.attach_money),
                                 ),
-                                validator: (v) => Validators.decimalRange(
-                                  v,
-                                  min: 50,
-                                  max: 1000000,
-                                  label: 'Цена',
-                                ),
+                                validator: (v) {
+                                  final server = _serverErrors['price'];
+                                  if (server != null) return server;
+                                  return Validators.decimalRange(
+                                    v,
+                                    min: 50,
+                                    max: 1000000,
+                                    label: 'Цена',
+                                  );
+                                },
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -252,10 +246,14 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
                                   labelText: 'Стеблей',
                                   prefixIcon: Icon(Icons.grass),
                                 ),
-                                validator: (v) => Validators.positiveInt(
-                                  v,
-                                  label: 'Количество стеблей',
-                                ),
+                                validator: (v) {
+                                  final server = _serverErrors['stemCount'];
+                                  if (server != null) return server;
+                                  return Validators.positiveInt(
+                                    v,
+                                    label: 'Количество стеблей',
+                                  );
+                                },
                               ),
                             ),
                           ],
@@ -271,10 +269,14 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
                                   labelText: 'Всего на складе',
                                   prefixIcon: Icon(Icons.inventory),
                                 ),
-                                validator: (v) => Validators.nonNegativeInt(
-                                  v,
-                                  label: 'Всего на складе',
-                                ),
+                                validator: (v) {
+                                  final server = _serverErrors['stockTotal'];
+                                  if (server != null) return server;
+                                  return Validators.nonNegativeInt(
+                                    v,
+                                    label: 'Всего на складе',
+                                  );
+                                },
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -286,10 +288,15 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
                                   labelText: 'Доступно',
                                   prefixIcon: Icon(Icons.check_circle),
                                 ),
-                                validator: (v) => Validators.nonNegativeInt(
-                                  v,
-                                  label: 'Доступно',
-                                ),
+                                validator: (v) {
+                                  final server =
+                                      _serverErrors['stockAvailable'];
+                                  if (server != null) return server;
+                                  return Validators.nonNegativeInt(
+                                    v,
+                                    label: 'Доступно',
+                                  );
+                                },
                               ),
                             ),
                           ],
@@ -304,8 +311,6 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-
-                        // Многие-к-одному: поставщик
                         DropdownButtonFormField<int>(
                           initialValue: _supplierId,
                           isExpanded: true,
@@ -321,17 +326,22 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
                               ),
                           ],
                           onChanged: (v) => setState(() => _supplierId = v),
-                          validator: (v) =>
-                              v == null ? 'Выберите поставщика' : null,
+                          validator: (v) {
+                            final server = _serverErrors['supplierId'];
+                            if (server != null) return server;
+                            return v == null ? 'Выберите поставщика' : null;
+                          },
                         ),
                         const SizedBox(height: 16),
-
-                        // Многие-ко-многим: категории
                         FormField<List<int>>(
                           initialValue: _categoryIds,
-                          validator: (v) => (v == null || v.isEmpty)
-                              ? 'Выберите хотя бы одну категорию'
-                              : null,
+                          validator: (v) {
+                            final server = _serverErrors['categoryIds'];
+                            if (server != null) return server;
+                            return (v == null || v.isEmpty)
+                                ? 'Выберите хотя бы одну категорию'
+                                : null;
+                          },
                           builder: (field) {
                             return InputDecorator(
                               decoration: InputDecoration(
@@ -367,9 +377,20 @@ class _BouquetFormScreenState extends State<BouquetFormScreen> {
                             Expanded(
                               child: FilledButton(
                                 onPressed: _loading ? null : _submit,
-                                child: Text(
-                                  widget.isEditing ? 'Сохранить' : 'Создать',
-                                ),
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Text(
+                                        widget.isEditing
+                                            ? 'Сохранить'
+                                            : 'Создать',
+                                      ),
                               ),
                             ),
                             const SizedBox(width: 12),

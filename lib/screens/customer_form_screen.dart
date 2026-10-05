@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
+import '../core/api_exceptions.dart';
 import '../models/models.dart';
-import '../state/notifiers.dart';
 import '../repositories/repositories.dart';
 
 class CustomerFormScreen extends StatefulWidget {
@@ -26,6 +27,7 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   final _cardNumberController = TextEditingController();
   final _cardDiscountController = TextEditingController();
 
+  Map<String, String> _serverErrors = {};
   bool _loading = false;
   bool _initialized = false;
 
@@ -69,26 +71,11 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
   }
 
   Future<void> _submit() async {
+    setState(() => _serverErrors = {});
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
 
     final repo = context.read<CustomerRepository>();
-    final notifier = context.read<CustomerListNotifier>();
-    final email = _emailController.text.trim();
-
-    final exists = await notifier.emailExists(
-      email,
-      exceptId: widget.isEditing ? widget.id : null,
-    );
-    if (exists) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Этот email уже используется')),
-      );
-      return;
-    }
-
     final card = _hasCard
         ? LoyaltyCard(
             number: _cardNumberController.text.trim(),
@@ -97,38 +84,40 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
           )
         : null;
 
-    if (widget.isEditing) {
-      final existing = await repo.findById(widget.id!);
-      if (existing == null) {
-        if (!mounted) return;
-        setState(() => _loading = false);
-        return;
-      }
-      await repo.update(
-        existing.copyWith(
-          firstName: _firstNameController.text.trim(),
-          lastName: _lastNameController.text.trim(),
-          email: email,
-          phone: _phoneController.text.trim(),
-          card: card,
-          clearCard: !_hasCard,
-        ),
-      );
-    } else {
-      await repo.create(
-        Customer(
-          id: 0,
-          firstName: _firstNameController.text.trim(),
-          lastName: _lastNameController.text.trim(),
-          email: email,
-          phone: _phoneController.text.trim(),
-          card: card,
-        ),
-      );
-    }
+    final customer = Customer(
+      id: widget.id ?? 0,
+      firstName: _firstNameController.text.trim(),
+      lastName: _lastNameController.text.trim(),
+      email: _emailController.text.trim(),
+      phone: _phoneController.text.trim(),
+      card: card,
+    );
 
-    if (!mounted) return;
-    context.go('/customers');
+    try {
+      if (widget.isEditing) {
+        await repo.update(customer);
+      } else {
+        await repo.create(customer);
+      }
+      if (!mounted) return;
+      context.go('/customers');
+    } on ValidationException catch (e) {
+      if (!mounted) return;
+      setState(() => _serverErrors = e.errors);
+      _formKey.currentState!.validate();
+    } on ConflictException catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.message);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      _showSnackBar(e.message);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _showSnackBar(String text) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   @override
@@ -193,6 +182,8 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                             prefixIcon: Icon(Icons.person),
                           ),
                           validator: (v) {
+                            final server = _serverErrors['firstName'];
+                            if (server != null) return server;
                             if (v == null || v.trim().isEmpty) {
                               return 'Введите имя';
                             }
@@ -210,6 +201,8 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                             prefixIcon: Icon(Icons.person_outline),
                           ),
                           validator: (v) {
+                            final server = _serverErrors['lastName'];
+                            if (server != null) return server;
                             if (v == null || v.trim().isEmpty) {
                               return 'Введите фамилию';
                             }
@@ -227,6 +220,8 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                             prefixIcon: Icon(Icons.email),
                           ),
                           validator: (v) {
+                            final server = _serverErrors['email'];
+                            if (server != null) return server;
                             if (v == null || v.trim().isEmpty) {
                               return 'Введите email';
                             }
@@ -247,6 +242,8 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                             prefixIcon: Icon(Icons.phone),
                           ),
                           validator: (v) {
+                            final server = _serverErrors['phone'];
+                            if (server != null) return server;
                             if (v == null || v.trim().isEmpty) {
                               return 'Введите телефон';
                             }
@@ -337,9 +334,20 @@ class _CustomerFormScreenState extends State<CustomerFormScreen> {
                             Expanded(
                               child: FilledButton(
                                 onPressed: _loading ? null : _submit,
-                                child: Text(
-                                  widget.isEditing ? 'Сохранить' : 'Создать',
-                                ),
+                                child: _loading
+                                    ? const SizedBox(
+                                        width: 20,
+                                        height: 20,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Text(
+                                        widget.isEditing
+                                            ? 'Сохранить'
+                                            : 'Создать',
+                                      ),
                               ),
                             ),
                             const SizedBox(width: 12),

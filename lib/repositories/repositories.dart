@@ -1,8 +1,10 @@
+import 'package:dio/dio.dart';
+
 import '../models/models.dart';
 import 'seed_data.dart';
 
 abstract interface class BouquetRepository {
-  Future<PageResult<Bouquet>> find(BouquetQuery q);
+  Future<PageResult<Bouquet>> find(BouquetQuery q, {CancelToken? cancelToken});
   Future<Bouquet?> findById(int id);
   Future<Bouquet> create(Bouquet b);
   Future<Bouquet> update(Bouquet b);
@@ -17,7 +19,10 @@ class InMemoryBouquetRepository implements BouquetRepository {
   int _nextId = seedBouquets.length + 1;
 
   @override
-  Future<PageResult<Bouquet>> find(BouquetQuery q) async {
+  Future<PageResult<Bouquet>> find(
+    BouquetQuery q, {
+    CancelToken? cancelToken,
+  }) async {
     await Future.delayed(const Duration(milliseconds: 250));
     var rows = _bouquets
         .where((b) => q.includeDeleted || !b.isDeleted)
