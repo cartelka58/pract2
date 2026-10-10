@@ -5,7 +5,10 @@ import 'api_exceptions.dart';
 import 'config.dart';
 import 'retry_interceptor.dart';
 
-Dio buildDio({String? Function()? tokenProvider}) {
+Dio buildDio({
+  String? Function()? tokenProvider,
+  Future<void> Function()? onUnauthorized,
+}) {
   final dio = Dio(
     BaseOptions(
       baseUrl: apiBaseUrl,
@@ -18,7 +21,6 @@ Dio buildDio({String? Function()? tokenProvider}) {
 
   dio.interceptors.addAll([
     RetryInterceptor(dio: dio),
-
     InterceptorsWrapper(
       onRequest: (options, handler) {
         final token = tokenProvider?.call();
@@ -33,7 +35,8 @@ Dio buildDio({String? Function()? tokenProvider}) {
       onResponse: (response, handler) {
         if (kDebugMode) {
           debugPrint(
-              '[API] ← ${response.statusCode} ${response.requestOptions.uri}');
+            '[API] ← ${response.statusCode} ${response.requestOptions.uri}',
+          );
         }
         final status = response.statusCode ?? 0;
         if (status >= 400) {
@@ -49,10 +52,29 @@ Dio buildDio({String? Function()? tokenProvider}) {
         }
         return handler.next(response);
       },
-      onError: (error, handler) {
+      onError: (error, handler) async {
         if (kDebugMode) {
           debugPrint('[API] ✗ ${error.requestOptions.uri}: ${error.type}');
         }
+
+        final status = error.response?.statusCode;
+        final path = error.requestOptions.path;
+
+        if (status == 401 &&
+            onUnauthorized != null &&
+            !path.contains('/auth/')) {
+          try {
+            await onUnauthorized();
+            final options = error.requestOptions;
+            options.headers['Authorization'] =
+                'Bearer ${tokenProvider?.call()}';
+            final response = await dio.fetch(options);
+            return handler.resolve(response);
+          } catch (_) {
+            // не удалось обновить — идём дальше
+          }
+        }
+
         return handler.next(error);
       },
     ),

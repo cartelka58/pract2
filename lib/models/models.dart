@@ -1,3 +1,89 @@
+enum Role {
+  customer(1, 'customer'),
+  florist(2, 'florist'),
+  admin(3, 'admin');
+
+  final int level;
+  final String api;
+  const Role(this.level, this.api);
+
+  static Role fromApi(String? value) {
+    switch (value) {
+      case 'admin':
+        return Role.admin;
+      case 'florist':
+        return Role.florist;
+      case 'customer':
+      default:
+        return Role.customer;
+    }
+  }
+
+  String get title {
+    switch (this) {
+      case Role.admin:
+        return 'Администратор';
+      case Role.florist:
+        return 'Флорист';
+      case Role.customer:
+        return 'Покупатель';
+    }
+  }
+}
+
+class AppUser {
+  final int id;
+  final String username;
+  final String fullName;
+  final String email;
+  final Role role;
+
+  const AppUser({
+    required this.id,
+    required this.username,
+    required this.fullName,
+    required this.email,
+    required this.role,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'username': username,
+    'fullName': fullName,
+    'email': email,
+    'role': role.api,
+  };
+
+  factory AppUser.fromJson(Map<String, dynamic> json) => AppUser(
+    id: json['id'] as int,
+    username: json['username'] as String? ?? '',
+    fullName: json['fullName'] as String? ?? '',
+    email: json['email'] as String? ?? '',
+    role: Role.fromApi(json['role'] as String?),
+  );
+}
+
+class AuthResult {
+  final String accessToken;
+  final String refreshToken;
+  final int expiresIn;
+  final AppUser user;
+
+  const AuthResult({
+    required this.accessToken,
+    required this.refreshToken,
+    required this.expiresIn,
+    required this.user,
+  });
+
+  factory AuthResult.fromJson(Map<String, dynamic> json) => AuthResult(
+    accessToken: json['accessToken'] as String? ?? '',
+    refreshToken: json['refreshToken'] as String? ?? '',
+    expiresIn: json['expiresIn'] as int? ?? 900,
+    user: AppUser.fromJson(json['user'] as Map<String, dynamic>),
+  );
+}
+
 class PageResult<T> {
   final List<T> items;
   final int page;
@@ -416,4 +502,3 @@ class BouquetQuery {
 
   static const _unset = Object();
 }
-  

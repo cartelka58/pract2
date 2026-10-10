@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import '../models/models.dart';
+import '../state/auth_notifier.dart';
 import '../state/notifiers.dart';
 import '../widgets/entity_table.dart';
 import '../widgets/paginator.dart';
@@ -55,6 +57,7 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
     final n = context.watch<BouquetListNotifier>();
     final categories = context.watch<CategoryListNotifier>().items;
     final suppliers = context.watch<SupplierListNotifier>().items;
+    final auth = context.watch<AuthNotifier>();
     final isNarrow = MediaQuery.of(context).size.width < 600;
     final rose = Theme.of(context).colorScheme.primary;
     final lavender = Theme.of(context).colorScheme.secondary;
@@ -83,30 +86,76 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
           ],
         ),
         actions: [
+          // Имя пользователя и роль
+          if (auth.isAuthenticated)
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      auth.user?.fullName ?? '',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      auth.user?.role.title ?? '',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+          // Добавить букет — только флорист и админ
+          if (auth.has(Role.florist))
+            IconButton(
+              tooltip: 'Добавить букет',
+              icon: const Icon(Icons.add),
+              onPressed: () => context.go('/bouquets/new'),
+            ),
+
+          // Справочники — только флорист и админ
+          if (auth.has(Role.florist)) ...[
+            IconButton(
+              tooltip: 'Категории',
+              icon: const Icon(Icons.category),
+              onPressed: () => context.go('/categories'),
+            ),
+            IconButton(
+              tooltip: 'Поставщики',
+              icon: const Icon(Icons.local_shipping),
+              onPressed: () => context.go('/suppliers'),
+            ),
+            IconButton(
+              tooltip: 'Флористы',
+              icon: const Icon(Icons.emoji_nature),
+              onPressed: () => context.go('/florists'),
+            ),
+            IconButton(
+              tooltip: 'Покупатели',
+              icon: const Icon(Icons.people),
+              onPressed: () => context.go('/customers'),
+            ),
+          ],
+
+          // Выйти
           IconButton(
-            tooltip: 'Добавить букет',
-            icon: const Icon(Icons.add),
-            onPressed: () => context.go('/bouquets/new'),
-          ),
-          IconButton(
-            tooltip: 'Категории',
-            icon: const Icon(Icons.category),
-            onPressed: () => context.go('/categories'),
-          ),
-          IconButton(
-            tooltip: 'Поставщики',
-            icon: const Icon(Icons.local_shipping),
-            onPressed: () => context.go('/suppliers'),
-          ),
-          IconButton(
-            tooltip: 'Флористы',
-            icon: const Icon(Icons.emoji_nature),
-            onPressed: () => context.go('/florists'),
-          ),
-          IconButton(
-            tooltip: 'Покупатели',
-            icon: const Icon(Icons.people),
-            onPressed: () => context.go('/customers'),
+            tooltip: 'Выйти',
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              await context.read<AuthNotifier>().logout();
+              if (!context.mounted) return;
+              context.go('/login');
+            },
           ),
         ],
       ),
@@ -121,7 +170,7 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
         child: Column(
           children: [
             _filters(n, categories, suppliers, rose, lavender),
-            if (n.hasSelection)
+            if (n.hasSelection && auth.has(Role.florist))
               Material(
                 color: rose.withValues(alpha: 0.15),
                 child: Padding(
@@ -357,6 +406,10 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
   }
 
   Widget _table(BouquetListNotifier n, List<Category> categories) {
+    final auth = context.watch<AuthNotifier>();
+    final canEdit = auth.has(Role.florist);
+    final canHardDelete = auth.has(Role.admin);
+
     String catNames(Bouquet b) {
       return b.categoryIds
           .map((id) {
@@ -370,7 +423,7 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
       items: n.result.items,
       idOf: (b) => b.id,
       selected: n.selected,
-      onToggleSelect: n.toggleSelection,
+      onToggleSelect: canEdit ? n.toggleSelection : null,
       onRowTap: (b) => context.go('/bouquets/${b.id}'),
       sortField: n.query.sortField,
       sortAscending: n.query.sortAscending,
@@ -408,34 +461,41 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
           build: (b) => Text('${b.stockAvailable}/${b.stockTotal}'),
         ),
       ],
-      actions: (b) => [
-        IconButton(
-          icon: const Icon(Icons.edit),
-          tooltip: 'Редактировать',
-          onPressed: () => context.go('/bouquets/${b.id}/edit'),
-        ),
-        if (!b.isDeleted)
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            tooltip: 'Логически удалить',
-            onPressed: () => n.softDeleteOne(b.id),
-          )
-        else
-          IconButton(
-            icon: const Icon(Icons.restore),
-            tooltip: 'Восстановить',
-            onPressed: () => n.restoreOne(b.id),
-          ),
-        IconButton(
-          icon: const Icon(Icons.delete_forever),
-          tooltip: 'Удалить насовсем',
-          onPressed: () => n.hardDeleteOne(b.id),
-        ),
-      ],
+      actions: canEdit
+          ? (b) => [
+              IconButton(
+                icon: const Icon(Icons.edit),
+                tooltip: 'Редактировать',
+                onPressed: () => context.go('/bouquets/${b.id}/edit'),
+              ),
+              if (!b.isDeleted)
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  tooltip: 'Логически удалить',
+                  onPressed: () => n.softDeleteOne(b.id),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.restore),
+                  tooltip: 'Восстановить',
+                  onPressed: () => n.restoreOne(b.id),
+                ),
+              if (canHardDelete)
+                IconButton(
+                  icon: const Icon(Icons.delete_forever),
+                  tooltip: 'Удалить насовсем',
+                  onPressed: () => n.hardDeleteOne(b.id),
+                ),
+            ]
+          : null,
     );
   }
 
   Widget _cards(BouquetListNotifier n, Color rose) {
+    final auth = context.watch<AuthNotifier>();
+    final canEdit = auth.has(Role.florist);
+    final canHardDelete = auth.has(Role.admin);
+
     return ListView.builder(
       padding: const EdgeInsets.all(12),
       itemCount: n.result.items.length,
@@ -444,10 +504,12 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
         return Card(
           margin: const EdgeInsets.only(bottom: 10),
           child: ListTile(
-            leading: Checkbox(
-              value: n.selected.contains(b.id),
-              onChanged: (_) => n.toggleSelection(b.id),
-            ),
+            leading: canEdit
+                ? Checkbox(
+                    value: n.selected.contains(b.id),
+                    onChanged: (_) => n.toggleSelection(b.id),
+                  )
+                : null,
             title: Text(
               b.title,
               style: TextStyle(color: rose, fontWeight: FontWeight.w600),
@@ -456,25 +518,32 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
               '${b.price.toStringAsFixed(0)} ₽ • ${b.stemCount} стеблей • ${b.sku}',
             ),
             onTap: () => context.go('/bouquets/${b.id}'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  onPressed: () => context.go('/bouquets/${b.id}/edit'),
-                ),
-                if (!b.isDeleted)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => n.softDeleteOne(b.id),
+            trailing: canEdit
+                ? Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        onPressed: () => context.go('/bouquets/${b.id}/edit'),
+                      ),
+                      if (!b.isDeleted)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => n.softDeleteOne(b.id),
+                        )
+                      else
+                        IconButton(
+                          icon: const Icon(Icons.restore),
+                          onPressed: () => n.restoreOne(b.id),
+                        ),
+                      if (canHardDelete)
+                        IconButton(
+                          icon: const Icon(Icons.delete_forever),
+                          onPressed: () => n.hardDeleteOne(b.id),
+                        ),
+                    ],
                   )
-                else
-                  IconButton(
-                    icon: const Icon(Icons.restore),
-                    onPressed: () => n.restoreOne(b.id),
-                  ),
-              ],
-            ),
+                : null,
           ),
         );
       },

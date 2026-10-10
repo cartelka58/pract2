@@ -1,9 +1,12 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/api_client.dart';
+import 'core/auth_api.dart';
 import 'repositories/api_bouquet_repository.dart';
 import 'repositories/api_category_repository.dart';
 import 'repositories/api_customer_repository.dart';
@@ -11,16 +14,48 @@ import 'repositories/api_florist_repository.dart';
 import 'repositories/api_supplier_repository.dart';
 import 'repositories/repositories.dart';
 import 'router.dart';
+import 'state/auth_notifier.dart';
 import 'state/notifiers.dart';
+import 'state/reference_cache.dart';
+import 'state/session_manager.dart';
+import 'widgets/inactivity_watcher.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   usePathUrlStrategy();
 
+  final prefs = await SharedPreferences.getInstance();
+
+  late AuthNotifier authNotifier;
+
+  final dio = buildDio(
+    tokenProvider: () => authNotifier.accessToken,
+    onUnauthorized: () => authNotifier.refreshTokens(),
+  );
+
+  final authApi = AuthApi(dio);
+  authNotifier = AuthNotifier(prefs, authApi);
+
+  final sessionManager = SessionManager(authNotifier);
+
+  // Автозапуск/остановка таймеров сессии при входе и выходе
+  authNotifier.addListener(() {
+    if (authNotifier.isAuthenticated) {
+      sessionManager.start();
+    } else {
+      sessionManager.stop();
+    }
+  });
+
+  await authNotifier.restore();
+
   runApp(
     MultiProvider(
       providers: [
-        Provider<Dio>(create: (_) => buildDio()),
+        Provider<Dio>.value(value: dio),
+        Provider<AuthApi>.value(value: authApi),
+        ChangeNotifierProvider<AuthNotifier>.value(value: authNotifier),
+        ChangeNotifierProvider<SessionManager>.value(value: sessionManager),
 
         Provider<BouquetRepository>(
           create: (ctx) => ApiBouquetRepository(ctx.read<Dio>()),
@@ -38,7 +73,13 @@ Future<void> main() async {
           create: (ctx) => ApiCustomerRepository(ctx.read<Dio>()),
         ),
 
-        // Состояние
+        ChangeNotifierProvider<ReferenceCache>(
+          create: (ctx) => ReferenceCache(
+            ctx.read<CategoryRepository>(),
+            ctx.read<SupplierRepository>(),
+          ),
+        ),
+
         ChangeNotifierProvider(
           create: (ctx) => BouquetListNotifier(ctx.read<BouquetRepository>()),
         ),
@@ -55,13 +96,17 @@ Future<void> main() async {
           create: (ctx) => CustomerListNotifier(ctx.read<CustomerRepository>()),
         ),
       ],
-      child: const FlowerShopApp(),
+      child: InactivityWatcher(
+        child: FlowerShopApp(router: buildRouter(authNotifier)),
+      ),
     ),
   );
 }
 
 class FlowerShopApp extends StatelessWidget {
-  const FlowerShopApp({super.key});
+  final GoRouter router;
+
+  const FlowerShopApp({super.key, required this.router});
 
   static const _rose = Color(0xFFD81B60);
   static const _lavender = Color(0xFF9575CD);
@@ -159,7 +204,7 @@ class FlowerShopApp extends StatelessWidget {
           }),
         ),
       ),
-      routerConfig: appRouter,
+      routerConfig: router,
     );
   }
 }
