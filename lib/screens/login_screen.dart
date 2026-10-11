@@ -36,9 +36,9 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _loading = true);
     try {
       await context.read<AuthNotifier>().login(
-            _usernameController.text.trim(),
-            _passwordController.text,
-          );
+        _usernameController.text.trim(),
+        _passwordController.text,
+      );
       if (!mounted) return;
       // Возвращаемся туда, откуда пришли (или на главную)
       final target = widget.from ?? '/';
@@ -65,11 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFFFF8E1),
-              Color(0xFFFCE4EC),
-              Color(0xFFEDE7F6),
-            ],
+            colors: [Color(0xFFFFF8E1), Color(0xFFFCE4EC), Color(0xFFEDE7F6)],
           ),
         ),
         child: Center(
@@ -85,8 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.local_florist,
-                            size: 56, color: rose),
+                        Icon(Icons.local_florist, size: 56, color: rose),
                         const SizedBox(height: 12),
                         Text(
                           'Цветочный магазин',
@@ -99,10 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const SizedBox(height: 4),
                         Text(
                           'Вход в систему',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: lavender,
-                          ),
+                          style: TextStyle(fontSize: 14, color: lavender),
                         ),
                         const SizedBox(height: 24),
                         TextFormField(
@@ -111,8 +103,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             labelText: 'Логин',
                             prefixIcon: Icon(Icons.person),
                           ),
-                          validator: (v) => Validators.lengthRange(v,
-                              min: 3, max: 40, label: 'Логин'),
+                          validator: (v) => Validators.lengthRange(
+                            v,
+                            min: 3,
+                            max: 40,
+                            label: 'Логин',
+                          ),
                         ),
                         const SizedBox(height: 16),
                         TextFormField(
@@ -122,15 +118,17 @@ class _LoginScreenState extends State<LoginScreen> {
                             labelText: 'Пароль',
                             prefixIcon: const Icon(Icons.lock),
                             suffixIcon: IconButton(
-                              icon: Icon(_obscure
-                                  ? Icons.visibility
-                                  : Icons.visibility_off),
+                              icon: Icon(
+                                _obscure
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
                               onPressed: () =>
                                   setState(() => _obscure = !_obscure),
                             ),
                           ),
-                          validator: (v) => Validators.required(v,
-                              label: 'Пароль'),
+                          validator: (v) =>
+                              Validators.required(v, label: 'Пароль'),
                         ),
                         if (_errorMessage != null) ...[
                           const SizedBox(height: 16),
@@ -142,8 +140,10 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.error_outline,
-                                    color: Colors.red),
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: Colors.red,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(

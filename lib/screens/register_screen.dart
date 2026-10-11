@@ -55,11 +55,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _loading = true);
     try {
       await context.read<AuthNotifier>().register(
-            username: _usernameController.text.trim(),
-            password: _passwordController.text,
-            email: _emailController.text.trim(),
-            fullName: _fullNameController.text.trim(),
-          );
+        username: _usernameController.text.trim(),
+        password: _passwordController.text,
+        email: _emailController.text.trim(),
+        fullName: _fullNameController.text.trim(),
+      );
       if (!mounted) return;
       context.go('/');
     } on ValidationException catch (e) {
@@ -95,11 +95,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFFFF8E1),
-              Color(0xFFFCE4EC),
-              Color(0xFFEDE7F6),
-            ],
+            colors: [Color(0xFFFFF8E1), Color(0xFFFCE4EC), Color(0xFFEDE7F6)],
           ),
         ),
         child: Center(
@@ -116,8 +112,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.person_add_alt,
-                            size: 48, color: rose),
+                        Icon(Icons.person_add_alt, size: 48, color: rose),
                         const SizedBox(height: 12),
                         Text(
                           'Новый аккаунт',
@@ -137,8 +132,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           validator: (v) {
                             final server = _serverErrors['username'];
                             if (server != null) return server;
-                            return Validators.lengthRange(v,
-                                min: 3, max: 40, label: 'Логин');
+                            return Validators.lengthRange(
+                              v,
+                              min: 3,
+                              max: 40,
+                              label: 'Логин',
+                            );
                           },
                         ),
                         const SizedBox(height: 16),
@@ -151,8 +150,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           validator: (v) {
                             final server = _serverErrors['fullName'];
                             if (server != null) return server;
-                            return Validators.lengthRange(v,
-                                min: 3, max: 80, label: 'ФИО');
+                            return Validators.lengthRange(
+                              v,
+                              min: 3,
+                              max: 80,
+                              label: 'ФИО',
+                            );
                           },
                         ),
                         const SizedBox(height: 16),
@@ -175,12 +178,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           decoration: InputDecoration(
                             labelText: 'Пароль',
                             prefixIcon: const Icon(Icons.lock),
-                            helperText:
-                                'Минимум 8 символов, цифра, спецсимвол',
+                            helperText: 'Минимум 8 символов, цифра, спецсимвол',
                             suffixIcon: IconButton(
-                              icon: Icon(_obscure
-                                  ? Icons.visibility
-                                  : Icons.visibility_off),
+                              icon: Icon(
+                                _obscure
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
                               onPressed: () =>
                                   setState(() => _obscure = !_obscure),
                             ),
@@ -201,14 +205,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.error_outline,
-                                    color: Colors.red),
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: Colors.red,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     _errorMessage!,
-                                    style:
-                                        const TextStyle(color: Colors.red),
+                                    style: const TextStyle(color: Colors.red),
                                   ),
                                 ),
                               ],
@@ -253,4 +258,4 @@ class _RegisterScreenState extends State<RegisterScreen> {
       ),
     );
   }
-} 
+}

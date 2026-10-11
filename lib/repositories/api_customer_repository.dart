@@ -71,7 +71,6 @@ class ApiCustomerRepository implements CustomerRepository {
   Future<void> restore(int id) =>
       guard(() => _dio.post('/customers/$id/restore'));
 
-
   @override
   Future<bool> emailExists(String email, {int? exceptId}) => guard(() async {
     final response = await _dio.get(

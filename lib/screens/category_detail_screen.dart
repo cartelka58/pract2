@@ -49,11 +49,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFFFF8E1),
-              Color(0xFFFCE4EC),
-              Color(0xFFEDE7F6),
-            ],
+            colors: [Color(0xFFFFF8E1), Color(0xFFFCE4EC), Color(0xFFEDE7F6)],
           ),
         ),
         child: Center(
@@ -63,9 +59,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
               future: _future,
               builder: (context, snap) {
                 if (snap.connectionState != ConnectionState.done) {
-                  return Center(
-                    child: CircularProgressIndicator(color: rose),
-                  );
+                  return Center(child: CircularProgressIndicator(color: rose));
                 }
                 final c = snap.data;
                 if (c == null) {
@@ -127,8 +121,7 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                                 ),
                                 child: Row(
                                   children: [
-                                    Icon(Icons.delete_outline,
-                                        color: lavender),
+                                    Icon(Icons.delete_outline, color: lavender),
                                     const SizedBox(width: 8),
                                     const Text('Логически удалена'),
                                   ],
@@ -139,8 +132,8 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
                           Row(
                             children: [
                               FilledButton.icon(
-                                onPressed: () => context
-                                    .go('/categories/${c.id}/edit'),
+                                onPressed: () =>
+                                    context.go('/categories/${c.id}/edit'),
                                 icon: const Icon(Icons.edit),
                                 label: const Text('Редактировать'),
                               ),
@@ -173,8 +166,10 @@ class _CategoryDetailScreenState extends State<CategoryDetailScreen> {
         children: [
           SizedBox(
             width: 140,
-            child: Text(label,
-                style: const TextStyle(fontWeight: FontWeight.w600)),
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
           ),
           Expanded(child: Text(value)),
         ],

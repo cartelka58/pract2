@@ -24,11 +24,7 @@ class ForbiddenScreen extends StatelessWidget {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFFFFF8E1),
-              Color(0xFFFCE4EC),
-              Color(0xFFEDE7F6),
-            ],
+            colors: [Color(0xFFFFF8E1), Color(0xFFFCE4EC), Color(0xFFEDE7F6)],
           ),
         ),
         child: Center(

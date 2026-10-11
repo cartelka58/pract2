@@ -56,9 +56,7 @@ class _InactivityDialogState extends State<InactivityDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Сессия завершится автоматически из-за неактивности.',
-            ),
+            const Text('Сессия завершится автоматически из-за неактивности.'),
             const SizedBox(height: 12),
             Text(
               'Осталось: $_secondsLeft сек.',
