@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import '../models/models.dart';
+import '../state/auth_notifier.dart';
 import '../state/notifiers.dart';
 import '../widgets/entity_table.dart';
 
@@ -23,6 +25,10 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
   @override
   Widget build(BuildContext context) {
     final n = context.watch<CustomerListNotifier>();
+    final auth = context.watch<AuthNotifier>();
+    final width = MediaQuery.of(context).size.width;
+    final isNarrow = width < 800;
+    final hideActionsInMenu = width < 600;
     final rose = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
@@ -36,16 +42,51 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'К букетам',
-            icon: const Icon(Icons.local_florist),
-            onPressed: () => context.go('/'),
-          ),
-          IconButton(
-            tooltip: 'Добавить',
-            icon: const Icon(Icons.add),
-            onPressed: () => context.go('/customers/new'),
-          ),
+          if (hideActionsInMenu)
+            PopupMenuButton<String>(
+              tooltip: 'Меню',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'logout') {
+                  context.read<AuthNotifier>().logout();
+                  if (!context.mounted) return;
+                  context.go('/login');
+                  return;
+                }
+                context.go(value);
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: '/', child: Text('К букетам')),
+                if (auth.has(Role.florist))
+                  const PopupMenuItem(
+                    value: '/customers/new',
+                    child: Text('Добавить покупателя'),
+                  ),
+                const PopupMenuItem(value: 'logout', child: Text('Выйти')),
+              ],
+            )
+          else ...[
+            IconButton(
+              tooltip: 'К букетам',
+              icon: const Icon(Icons.local_florist),
+              onPressed: () => context.go('/'),
+            ),
+            if (auth.has(Role.florist))
+              IconButton(
+                tooltip: 'Добавить',
+                icon: const Icon(Icons.add),
+                onPressed: () => context.go('/customers/new'),
+              ),
+            IconButton(
+              tooltip: 'Выйти',
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                await context.read<AuthNotifier>().logout();
+                if (!context.mounted) return;
+                context.go('/login');
+              },
+            ),
+          ],
         ],
       ),
       body: Container(
@@ -71,14 +112,14 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                 ],
               ),
             ),
-            Expanded(child: _body(n, rose)),
+            Expanded(child: _body(n, isNarrow, rose)),
           ],
         ),
       ),
     );
   }
 
-  Widget _body(CustomerListNotifier n, Color rose) {
+  Widget _body(CustomerListNotifier n, bool narrow, Color rose) {
     switch (n.status) {
       case LoadStatus.idle:
       case LoadStatus.loading:
@@ -101,6 +142,77 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
             ),
           );
         }
+
+        final auth = context.watch<AuthNotifier>();
+        final canEdit = auth.has(Role.florist);
+
+        if (narrow) {
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: n.items.length,
+            itemBuilder: (_, i) {
+              final c = n.items[i];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  title: Text(
+                    c.fullName,
+                    style: TextStyle(color: rose, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${c.email} • ${c.phone}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => context.go('/customers/${c.id}'),
+                  trailing: canEdit
+                      ? PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert),
+                          onSelected: (value) {
+                            switch (value) {
+                              case 'edit':
+                                context.go('/customers/${c.id}/edit');
+                                break;
+                              case 'soft-delete':
+                                n.softDelete(c.id);
+                                break;
+                              case 'restore':
+                                n.restore(c.id);
+                                break;
+                              case 'hard-delete':
+                                n.hardDelete(c.id);
+                                break;
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Редактировать'),
+                            ),
+                            if (!c.isDeleted)
+                              const PopupMenuItem(
+                                value: 'soft-delete',
+                                child: Text('Удалить'),
+                              )
+                            else
+                              const PopupMenuItem(
+                                value: 'restore',
+                                child: Text('Восстановить'),
+                              ),
+                            if (auth.has(Role.admin))
+                              const PopupMenuItem(
+                                value: 'hard-delete',
+                                child: Text('Удалить насовсем'),
+                              ),
+                          ],
+                        )
+                      : null,
+                ),
+              );
+            },
+          );
+        }
+
         return Padding(
           padding: const EdgeInsets.all(12),
           child: Container(
@@ -116,10 +228,18 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
               columns: [
                 TableColumnSpec(
                   label: 'Фамилия',
-                  build: (c) => Text(c.lastName),
+                  build: (c) =>
+                      Text(c.lastName, overflow: TextOverflow.ellipsis),
                 ),
-                TableColumnSpec(label: 'Имя', build: (c) => Text(c.firstName)),
-                TableColumnSpec(label: 'Email', build: (c) => Text(c.email)),
+                TableColumnSpec(
+                  label: 'Имя',
+                  build: (c) =>
+                      Text(c.firstName, overflow: TextOverflow.ellipsis),
+                ),
+                TableColumnSpec(
+                  label: 'Email',
+                  build: (c) => Text(c.email, overflow: TextOverflow.ellipsis),
+                ),
                 TableColumnSpec(label: 'Телефон', build: (c) => Text(c.phone)),
                 TableColumnSpec(
                   label: 'Карта',
@@ -132,27 +252,30 @@ class _CustomerListScreenState extends State<CustomerListScreen> {
                   ),
                 ),
               ],
-              actions: (c) => [
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  tooltip: 'Редактировать',
-                  onPressed: () => context.go('/customers/${c.id}/edit'),
-                ),
-                if (!c.isDeleted)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    onPressed: () => n.softDelete(c.id),
-                  )
-                else
-                  IconButton(
-                    icon: const Icon(Icons.restore),
-                    onPressed: () => n.restore(c.id),
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.delete_forever),
-                  onPressed: () => n.hardDelete(c.id),
-                ),
-              ],
+              actions: canEdit
+                  ? (c) => [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        tooltip: 'Редактировать',
+                        onPressed: () => context.go('/customers/${c.id}/edit'),
+                      ),
+                      if (!c.isDeleted)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          onPressed: () => n.softDelete(c.id),
+                        )
+                      else
+                        IconButton(
+                          icon: const Icon(Icons.restore),
+                          onPressed: () => n.restore(c.id),
+                        ),
+                      if (auth.has(Role.admin))
+                        IconButton(
+                          icon: const Icon(Icons.delete_forever),
+                          onPressed: () => n.hardDelete(c.id),
+                        ),
+                    ]
+                  : null,
             ),
           ),
         );

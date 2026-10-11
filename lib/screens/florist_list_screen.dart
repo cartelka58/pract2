@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
+
 import '../models/models.dart';
+import '../state/auth_notifier.dart';
 import '../state/notifiers.dart';
 import '../widgets/entity_table.dart';
 import '../widgets/paginator.dart';
@@ -43,7 +45,10 @@ class _FloristListScreenState extends State<FloristListScreen> {
   @override
   Widget build(BuildContext context) {
     final n = context.watch<FloristListNotifier>();
-    final isNarrow = MediaQuery.of(context).size.width < 600;
+    final auth = context.watch<AuthNotifier>();
+    final width = MediaQuery.of(context).size.width;
+    final isNarrow = width < 800;
+    final hideActionsInMenu = width < 600;
     final rose = Theme.of(context).colorScheme.primary;
     final lavender = Theme.of(context).colorScheme.secondary;
 
@@ -54,16 +59,51 @@ class _FloristListScreenState extends State<FloristListScreen> {
           children: [Icon(Icons.spa), SizedBox(width: 8), Text('Флористы')],
         ),
         actions: [
-          IconButton(
-            tooltip: 'К букетам',
-            icon: const Icon(Icons.local_florist),
-            onPressed: () => context.go('/'),
-          ),
-          IconButton(
-            tooltip: 'Добавить флориста',
-            icon: const Icon(Icons.add),
-            onPressed: () => context.go('/florists/new'),
-          ),
+          if (hideActionsInMenu)
+            PopupMenuButton<String>(
+              tooltip: 'Меню',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'logout') {
+                  context.read<AuthNotifier>().logout();
+                  if (!context.mounted) return;
+                  context.go('/login');
+                  return;
+                }
+                context.go(value);
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: '/', child: Text('К букетам')),
+                if (auth.has(Role.florist))
+                  const PopupMenuItem(
+                    value: '/florists/new',
+                    child: Text('Добавить флориста'),
+                  ),
+                const PopupMenuItem(value: 'logout', child: Text('Выйти')),
+              ],
+            )
+          else ...[
+            IconButton(
+              tooltip: 'К букетам',
+              icon: const Icon(Icons.local_florist),
+              onPressed: () => context.go('/'),
+            ),
+            if (auth.has(Role.florist))
+              IconButton(
+                tooltip: 'Добавить флориста',
+                icon: const Icon(Icons.add),
+                onPressed: () => context.go('/florists/new'),
+              ),
+            IconButton(
+              tooltip: 'Выйти',
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                await context.read<AuthNotifier>().logout();
+                if (!context.mounted) return;
+                context.go('/login');
+              },
+            ),
+          ],
         ],
       ),
       body: Container(
@@ -91,13 +131,16 @@ class _FloristListScreenState extends State<FloristListScreen> {
                   ],
                 ),
                 child: SizedBox(
-                  width: 380,
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: _onSearchChanged,
-                    decoration: const InputDecoration(
-                      labelText: 'Поиск по фамилии, имени, городу',
-                      prefixIcon: Icon(Icons.search),
+                  width: double.infinity,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 380),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: _onSearchChanged,
+                      decoration: const InputDecoration(
+                        labelText: 'Поиск по фамилии, имени, городу',
+                        prefixIcon: Icon(Icons.search),
+                      ),
                     ),
                   ),
                 ),
@@ -123,27 +166,9 @@ class _FloristListScreenState extends State<FloristListScreen> {
     switch (n.status) {
       case LoadStatus.idle:
       case LoadStatus.loading:
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(color: rose),
-              const SizedBox(height: 16),
-              Text('Загружаем флористов...', style: TextStyle(color: rose)),
-            ],
-          ),
-        );
+        return Center(child: CircularProgressIndicator(color: rose));
       case LoadStatus.error:
-        return Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.error_outline, color: rose, size: 64),
-              const SizedBox(height: 16),
-              Text('Ошибка: ${n.error}', style: TextStyle(color: rose)),
-            ],
-          ),
-        );
+        return Center(child: Text('Ошибка: ${n.error}'));
       case LoadStatus.success:
         if (n.result.items.isEmpty) {
           return Center(
@@ -160,6 +185,10 @@ class _FloristListScreenState extends State<FloristListScreen> {
             ),
           );
         }
+
+        final auth = context.watch<AuthNotifier>();
+        final canEdit = auth.has(Role.florist);
+
         if (narrow) {
           return ListView.builder(
             padding: const EdgeInsets.all(12),
@@ -169,40 +198,64 @@ class _FloristListScreenState extends State<FloristListScreen> {
               return Card(
                 margin: const EdgeInsets.only(bottom: 10),
                 child: ListTile(
-                  leading: Checkbox(
-                    value: n.selected.contains(f.id),
-                    onChanged: (_) => n.toggleSelection(f.id),
-                  ),
                   title: Text(
                     f.fullName,
                     style: TextStyle(color: rose, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  subtitle: Text('${f.city}, с ${f.experienceYear ?? "—"}'),
+                  subtitle: Text(
+                    '${f.city}, с ${f.experienceYear ?? "—"}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   onTap: () => context.go('/florists/${f.id}'),
-                  trailing: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => context.go('/florists/${f.id}/edit'),
-                      ),
-                      if (!f.isDeleted)
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () => n.softDeleteOne(f.id),
+                  trailing: canEdit
+                      ? PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert),
+                          onSelected: (value) {
+                            switch (value) {
+                              case 'edit':
+                                context.go('/florists/${f.id}/edit');
+                                break;
+                              case 'soft-delete':
+                                n.softDeleteOne(f.id);
+                                break;
+                              case 'restore':
+                                n.restoreOne(f.id);
+                                break;
+                              case 'hard-delete':
+                                n.hardDeleteOne(f.id);
+                                break;
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Редактировать'),
+                            ),
+                            if (!f.isDeleted)
+                              const PopupMenuItem(
+                                value: 'soft-delete',
+                                child: Text('Удалить'),
+                              )
+                            else
+                              const PopupMenuItem(
+                                value: 'restore',
+                                child: Text('Восстановить'),
+                              ),
+                            if (auth.has(Role.admin))
+                              const PopupMenuItem(
+                                value: 'hard-delete',
+                                child: Text('Удалить насовсем'),
+                              ),
+                          ],
                         )
-                      else
-                        IconButton(
-                          icon: const Icon(Icons.restore),
-                          onPressed: () => n.restoreOne(f.id),
-                        ),
-                    ],
-                  ),
+                      : null,
                 ),
               );
             },
           );
         }
+
         return Padding(
           padding: const EdgeInsets.all(12),
           child: Container(
@@ -220,7 +273,7 @@ class _FloristListScreenState extends State<FloristListScreen> {
               items: n.result.items,
               idOf: (f) => f.id,
               selected: n.selected,
-              onToggleSelect: n.toggleSelection,
+              onToggleSelect: canEdit ? n.toggleSelection : null,
               onRowTap: (f) => context.go('/florists/${f.id}'),
               sortField: n.query.sortField,
               sortAscending: n.query.sortAscending,
@@ -237,47 +290,52 @@ class _FloristListScreenState extends State<FloristListScreen> {
                 TableColumnSpec(
                   label: 'Фамилия',
                   sortField: 'lastName',
-                  build: (f) => Text(f.lastName),
+                  build: (f) =>
+                      Text(f.lastName, overflow: TextOverflow.ellipsis),
                 ),
                 TableColumnSpec(
                   label: 'Имя',
                   sortField: 'firstName',
-                  build: (f) => Text(f.firstName),
+                  build: (f) =>
+                      Text(f.firstName, overflow: TextOverflow.ellipsis),
                 ),
                 TableColumnSpec(
                   label: 'Город',
                   sortField: 'city',
-                  build: (f) => Text(f.city),
+                  build: (f) => Text(f.city, overflow: TextOverflow.ellipsis),
                 ),
                 TableColumnSpec(
                   label: 'В профессии с',
                   build: (f) => Text('${f.experienceYear ?? "—"}'),
                 ),
               ],
-              actions: (f) => [
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  tooltip: 'Редактировать',
-                  onPressed: () => context.go('/florists/${f.id}/edit'),
-                ),
-                if (!f.isDeleted)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: 'Логически удалить',
-                    onPressed: () => n.softDeleteOne(f.id),
-                  )
-                else
-                  IconButton(
-                    icon: const Icon(Icons.restore),
-                    tooltip: 'Восстановить',
-                    onPressed: () => n.restoreOne(f.id),
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.delete_forever),
-                  tooltip: 'Удалить насовсем',
-                  onPressed: () => n.hardDeleteOne(f.id),
-                ),
-              ],
+              actions: canEdit
+                  ? (f) => [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        tooltip: 'Редактировать',
+                        onPressed: () => context.go('/florists/${f.id}/edit'),
+                      ),
+                      if (!f.isDeleted)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          tooltip: 'Логически удалить',
+                          onPressed: () => n.softDeleteOne(f.id),
+                        )
+                      else
+                        IconButton(
+                          icon: const Icon(Icons.restore),
+                          tooltip: 'Восстановить',
+                          onPressed: () => n.restoreOne(f.id),
+                        ),
+                      if (auth.has(Role.admin))
+                        IconButton(
+                          icon: const Icon(Icons.delete_forever),
+                          tooltip: 'Удалить насовсем',
+                          onPressed: () => n.hardDeleteOne(f.id),
+                        ),
+                    ]
+                  : null,
             ),
           ),
         );

@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 
 import '../core/api_exceptions.dart';
 import '../models/models.dart';
+import '../state/auth_notifier.dart';
 import '../state/notifiers.dart';
 import '../widgets/entity_table.dart';
 
@@ -44,6 +45,12 @@ class _SupplierListScreenState extends State<SupplierListScreen> {
   @override
   Widget build(BuildContext context) {
     final n = context.watch<SupplierListNotifier>();
+    final auth = context.watch<AuthNotifier>();
+    final width = MediaQuery.of(context).size.width;
+    // Таблица влезает только от 800 px
+    final isNarrow = width < 800;
+    // Меню прячем на ширине < 600
+    final hideActionsInMenu = width < 600;
     final rose = Theme.of(context).colorScheme.primary;
 
     return Scaffold(
@@ -57,16 +64,51 @@ class _SupplierListScreenState extends State<SupplierListScreen> {
           ],
         ),
         actions: [
-          IconButton(
-            tooltip: 'К букетам',
-            icon: const Icon(Icons.local_florist),
-            onPressed: () => context.go('/'),
-          ),
-          IconButton(
-            tooltip: 'Добавить',
-            icon: const Icon(Icons.add),
-            onPressed: () => context.go('/suppliers/new'),
-          ),
+          if (hideActionsInMenu)
+            PopupMenuButton<String>(
+              tooltip: 'Меню',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'logout') {
+                  context.read<AuthNotifier>().logout();
+                  if (!context.mounted) return;
+                  context.go('/login');
+                  return;
+                }
+                context.go(value);
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: '/', child: Text('К букетам')),
+                if (auth.has(Role.florist))
+                  const PopupMenuItem(
+                    value: '/suppliers/new',
+                    child: Text('Добавить поставщика'),
+                  ),
+                const PopupMenuItem(value: 'logout', child: Text('Выйти')),
+              ],
+            )
+          else ...[
+            IconButton(
+              tooltip: 'К букетам',
+              icon: const Icon(Icons.local_florist),
+              onPressed: () => context.go('/'),
+            ),
+            if (auth.has(Role.florist))
+              IconButton(
+                tooltip: 'Добавить',
+                icon: const Icon(Icons.add),
+                onPressed: () => context.go('/suppliers/new'),
+              ),
+            IconButton(
+              tooltip: 'Выйти',
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                await context.read<AuthNotifier>().logout();
+                if (!context.mounted) return;
+                context.go('/login');
+              },
+            ),
+          ],
         ],
       ),
       body: Container(
@@ -92,14 +134,14 @@ class _SupplierListScreenState extends State<SupplierListScreen> {
                 ],
               ),
             ),
-            Expanded(child: _body(n, rose)),
+            Expanded(child: _body(n, isNarrow, rose)),
           ],
         ),
       ),
     );
   }
 
-  Widget _body(SupplierListNotifier n, Color rose) {
+  Widget _body(SupplierListNotifier n, bool narrow, Color rose) {
     switch (n.status) {
       case LoadStatus.idle:
       case LoadStatus.loading:
@@ -122,6 +164,79 @@ class _SupplierListScreenState extends State<SupplierListScreen> {
             ),
           );
         }
+
+        final auth = context.watch<AuthNotifier>();
+        final canEdit = auth.has(Role.florist);
+
+        // На узком экране — карточки
+        if (narrow) {
+          return ListView.builder(
+            padding: const EdgeInsets.all(12),
+            itemCount: n.items.length,
+            itemBuilder: (_, i) {
+              final s = n.items[i];
+              return Card(
+                margin: const EdgeInsets.only(bottom: 10),
+                child: ListTile(
+                  title: Text(
+                    s.name,
+                    style: TextStyle(color: rose, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${s.phone} • ${s.city}',
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: canEdit
+                      ? PopupMenuButton<String>(
+                          icon: const Icon(Icons.more_vert),
+                          onSelected: (value) {
+                            switch (value) {
+                              case 'edit':
+                                context.go('/suppliers/${s.id}/edit');
+                                break;
+                              case 'soft-delete':
+                                _deleteWithCheck(n, s.id, hard: false);
+                                break;
+                              case 'restore':
+                                n.restore(s.id);
+                                break;
+                              case 'hard-delete':
+                                _deleteWithCheck(n, s.id, hard: true);
+                                break;
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Редактировать'),
+                            ),
+                            if (!s.isDeleted)
+                              const PopupMenuItem(
+                                value: 'soft-delete',
+                                child: Text('Удалить'),
+                              )
+                            else
+                              const PopupMenuItem(
+                                value: 'restore',
+                                child: Text('Восстановить'),
+                              ),
+                            if (auth.has(Role.admin))
+                              const PopupMenuItem(
+                                value: 'hard-delete',
+                                child: Text('Удалить насовсем'),
+                              ),
+                          ],
+                        )
+                      : null,
+                  onTap: () => context.go('/suppliers/${s.id}'),
+                ),
+              );
+            },
+          );
+        }
+
+        // На широком — таблица
         return Padding(
           padding: const EdgeInsets.all(12),
           child: Container(
@@ -135,34 +250,42 @@ class _SupplierListScreenState extends State<SupplierListScreen> {
               onRowTap: (s) => context.go('/suppliers/${s.id}'),
               isDeleted: (s) => s.isDeleted,
               columns: [
-                TableColumnSpec(label: 'Название', build: (s) => Text(s.name)),
+                TableColumnSpec(
+                  label: 'Название',
+                  build: (s) => Text(s.name, overflow: TextOverflow.ellipsis),
+                ),
                 TableColumnSpec(label: 'Телефон', build: (s) => Text(s.phone)),
                 TableColumnSpec(label: 'Город', build: (s) => Text(s.city)),
               ],
-              actions: (s) => [
-                IconButton(
-                  icon: const Icon(Icons.edit),
-                  tooltip: 'Редактировать',
-                  onPressed: () => context.go('/suppliers/${s.id}/edit'),
-                ),
-                if (!s.isDeleted)
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline),
-                    tooltip: 'Логически удалить',
-                    onPressed: () => _deleteWithCheck(n, s.id, hard: false),
-                  )
-                else
-                  IconButton(
-                    icon: const Icon(Icons.restore),
-                    tooltip: 'Восстановить',
-                    onPressed: () => n.restore(s.id),
-                  ),
-                IconButton(
-                  icon: const Icon(Icons.delete_forever),
-                  tooltip: 'Удалить насовсем',
-                  onPressed: () => _deleteWithCheck(n, s.id, hard: true),
-                ),
-              ],
+              actions: canEdit
+                  ? (s) => [
+                      IconButton(
+                        icon: const Icon(Icons.edit),
+                        tooltip: 'Редактировать',
+                        onPressed: () => context.go('/suppliers/${s.id}/edit'),
+                      ),
+                      if (!s.isDeleted)
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline),
+                          tooltip: 'Логически удалить',
+                          onPressed: () =>
+                              _deleteWithCheck(n, s.id, hard: false),
+                        )
+                      else
+                        IconButton(
+                          icon: const Icon(Icons.restore),
+                          tooltip: 'Восстановить',
+                          onPressed: () => n.restore(s.id),
+                        ),
+                      if (auth.has(Role.admin))
+                        IconButton(
+                          icon: const Icon(Icons.delete_forever),
+                          tooltip: 'Удалить насовсем',
+                          onPressed: () =>
+                              _deleteWithCheck(n, s.id, hard: true),
+                        ),
+                    ]
+                  : null,
             ),
           ),
         );

@@ -58,7 +58,11 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
     final categories = context.watch<CategoryListNotifier>().items;
     final suppliers = context.watch<SupplierListNotifier>().items;
     final auth = context.watch<AuthNotifier>();
-    final isNarrow = MediaQuery.of(context).size.width < 600;
+    final width = MediaQuery.of(context).size.width;
+    // Таблица влезает только от 800 px — ниже показываем карточки
+    final isNarrow = width < 800;
+    // Меню прячем на ширине < 600 — там слишком мало места
+    final hideActionsInMenu = width < 600;
     final rose = Theme.of(context).colorScheme.primary;
     final lavender = Theme.of(context).colorScheme.secondary;
 
@@ -86,11 +90,11 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
           ],
         ),
         actions: [
-          // Имя пользователя и роль
-          if (auth.isAuthenticated)
+          // Имя пользователя и роль — только на широком экране
+          if (auth.isAuthenticated && !hideActionsInMenu)
             Center(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -115,48 +119,86 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
               ),
             ),
 
-          // Добавить букет — только флорист и админ
-          if (auth.has(Role.florist))
+          // На узком экране — всё в меню
+          if (hideActionsInMenu)
+            PopupMenuButton<String>(
+              tooltip: 'Меню',
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                if (value == 'logout') {
+                  context.read<AuthNotifier>().logout();
+                  if (!context.mounted) return;
+                  context.go('/login');
+                  return;
+                }
+                context.go(value);
+              },
+              itemBuilder: (context) => [
+                if (auth.has(Role.florist)) ...[
+                  const PopupMenuItem(
+                    value: '/bouquets/new',
+                    child: Text('Добавить букет'),
+                  ),
+                  const PopupMenuItem(
+                    value: '/categories',
+                    child: Text('Категории'),
+                  ),
+                  const PopupMenuItem(
+                    value: '/suppliers',
+                    child: Text('Поставщики'),
+                  ),
+                  const PopupMenuItem(
+                    value: '/florists',
+                    child: Text('Флористы'),
+                  ),
+                  const PopupMenuItem(
+                    value: '/customers',
+                    child: Text('Покупатели'),
+                  ),
+                ],
+                const PopupMenuItem(value: 'logout', child: Text('Выйти')),
+              ],
+            )
+          else ...[
+            // На широком экране — обычные иконки
+            if (auth.has(Role.florist))
+              IconButton(
+                tooltip: 'Добавить букет',
+                icon: const Icon(Icons.add),
+                onPressed: () => context.go('/bouquets/new'),
+              ),
+            if (auth.has(Role.florist)) ...[
+              IconButton(
+                tooltip: 'Категории',
+                icon: const Icon(Icons.category),
+                onPressed: () => context.go('/categories'),
+              ),
+              IconButton(
+                tooltip: 'Поставщики',
+                icon: const Icon(Icons.local_shipping),
+                onPressed: () => context.go('/suppliers'),
+              ),
+              IconButton(
+                tooltip: 'Флористы',
+                icon: const Icon(Icons.emoji_nature),
+                onPressed: () => context.go('/florists'),
+              ),
+              IconButton(
+                tooltip: 'Покупатели',
+                icon: const Icon(Icons.people),
+                onPressed: () => context.go('/customers'),
+              ),
+            ],
             IconButton(
-              tooltip: 'Добавить букет',
-              icon: const Icon(Icons.add),
-              onPressed: () => context.go('/bouquets/new'),
-            ),
-
-          // Справочники — только флорист и админ
-          if (auth.has(Role.florist)) ...[
-            IconButton(
-              tooltip: 'Категории',
-              icon: const Icon(Icons.category),
-              onPressed: () => context.go('/categories'),
-            ),
-            IconButton(
-              tooltip: 'Поставщики',
-              icon: const Icon(Icons.local_shipping),
-              onPressed: () => context.go('/suppliers'),
-            ),
-            IconButton(
-              tooltip: 'Флористы',
-              icon: const Icon(Icons.emoji_nature),
-              onPressed: () => context.go('/florists'),
-            ),
-            IconButton(
-              tooltip: 'Покупатели',
-              icon: const Icon(Icons.people),
-              onPressed: () => context.go('/customers'),
+              tooltip: 'Выйти',
+              icon: const Icon(Icons.logout),
+              onPressed: () async {
+                await context.read<AuthNotifier>().logout();
+                if (!context.mounted) return;
+                context.go('/login');
+              },
             ),
           ],
-
-          // Выйти
-          IconButton(
-            tooltip: 'Выйти',
-            icon: const Icon(Icons.logout),
-            onPressed: () async {
-              await context.read<AuthNotifier>().logout();
-              if (!context.mounted) return;
-              context.go('/login');
-            },
-          ),
         ],
       ),
       body: Container(
@@ -440,7 +482,7 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
         TableColumnSpec(
           label: 'Название',
           sortField: 'title',
-          build: (b) => Text(b.title),
+          build: (b) => Text(b.title, overflow: TextOverflow.ellipsis),
         ),
         TableColumnSpec(label: 'Артикул', build: (b) => Text(b.sku)),
         TableColumnSpec(
@@ -455,7 +497,10 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
           numeric: true,
           build: (b) => Text('${b.stemCount}'),
         ),
-        TableColumnSpec(label: 'Категории', build: (b) => Text(catNames(b))),
+        TableColumnSpec(
+          label: 'Категории',
+          build: (b) => Text(catNames(b), overflow: TextOverflow.ellipsis),
+        ),
         TableColumnSpec(
           label: 'Склад',
           build: (b) => Text('${b.stockAvailable}/${b.stockTotal}'),
@@ -513,33 +558,51 @@ class _BouquetListScreenState extends State<BouquetListScreen> {
             title: Text(
               b.title,
               style: TextStyle(color: rose, fontWeight: FontWeight.w600),
+              overflow: TextOverflow.ellipsis,
             ),
             subtitle: Text(
               '${b.price.toStringAsFixed(0)} ₽ • ${b.stemCount} стеблей • ${b.sku}',
+              overflow: TextOverflow.ellipsis,
             ),
             onTap: () => context.go('/bouquets/${b.id}'),
             trailing: canEdit
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.edit),
-                        onPressed: () => context.go('/bouquets/${b.id}/edit'),
+                ? PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert),
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'edit':
+                          context.go('/bouquets/${b.id}/edit');
+                          break;
+                        case 'soft-delete':
+                          n.softDeleteOne(b.id);
+                          break;
+                        case 'restore':
+                          n.restoreOne(b.id);
+                          break;
+                        case 'hard-delete':
+                          n.hardDeleteOne(b.id);
+                          break;
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Text('Редактировать'),
                       ),
                       if (!b.isDeleted)
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline),
-                          onPressed: () => n.softDeleteOne(b.id),
+                        const PopupMenuItem(
+                          value: 'soft-delete',
+                          child: Text('Удалить'),
                         )
                       else
-                        IconButton(
-                          icon: const Icon(Icons.restore),
-                          onPressed: () => n.restoreOne(b.id),
+                        const PopupMenuItem(
+                          value: 'restore',
+                          child: Text('Восстановить'),
                         ),
                       if (canHardDelete)
-                        IconButton(
-                          icon: const Icon(Icons.delete_forever),
-                          onPressed: () => n.hardDeleteOne(b.id),
+                        const PopupMenuItem(
+                          value: 'hard-delete',
+                          child: Text('Удалить насовсем'),
                         ),
                     ],
                   )
